@@ -1,97 +1,69 @@
-# 智能数据库分析系统 (Intelligent Database Analysis System)
+# 智能数据库分析系统 (DataAnalyzer)
 
-一个基于Claude的智能数据分析系统，能够自动生成数据分析报告和可视化图表。本系统支持多用户访问，提供直观的Web界面，可以进行复杂的数据分析任务。
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-[English Version](#english-version)
+一个基于Claude API的智能数据库分析系统，支持多用户协作和实时数据分析。
 
-## 目录
+## 🌟 功能特点
 
-- [功能特点](#功能特点)
-- [系统架构](#系统架构)
-- [系统要求](#系统要求)
-- [安装指南](#安装指南)
-- [使用方法](#使用方法)
-- [项目结构](#项目结构)
-- [API文档](#api文档)
-- [常见问题](#常见问题)
-- [更新日志](#更新日志)
-- [贡献指南](#贡献指南)
-- [许可证](#许可证)
+### 核心功能
+- 🔍 智能数据分析
+  - 自动识别数据类型和结构
+  - 智能生成分析报告
+  - 支持多种数据源分析
+  
+- 📊 数据可视化
+  - 自动生成图表
+  - 交互式数据展示
+  - 支持多种图表类型
 
-## 功能特点
+- 👥 多用户支持
+  - 独立的用户空间
+  - 数据访问控制
+  - 协作分析功能
 
-### 数据处理能力
-- 支持CSV文件导入和SQLite数据库管理
-- 自动数据类型识别和预处理
-- 支持大规模数据集处理
-- 数据清洗和标准化
+### 技术特性
+- 🔒 安全性
+  - 用户认证系统
+  - API密钥管理
+  - 数据加密存储
 
-### 智能分析功能
-- 智能SQL查询生成和数据分析
-- 自动异常值检测
-- 趋势分析和预测
-- 相关性分析
-- 多维度数据分析
+- 🚀 性能
+  - 异步处理
+  - 缓存优化
+  - 分布式支持
 
-### 可视化和报告
-- 自动生成美观的HTML分析报告
-- 使用Chart.js生成交互式图表
-- 支持多种图表类型（折线图、柱状图、散点图等）
-- 可导出PDF格式报告
+## 🛠️ 安装说明
 
-### 系统功能
-- 完整的分析记录保存和回溯功能
-- 支持多轮对话和上下文理解
-- 多用户支持，独立的用户空间
-- 实时分析进度显示
-
-## 系统架构
-
-### 前端架构
-- 基于原生JavaScript和HTML5
-- 响应式设计，支持移动端访问
-- WebSocket实时通信
-- 模块化的前端组件
-
-### 后端架构
-- Python Flask Web服务器
-- SQLite数据库存储
-- Claude API集成
-- 异步任务处理
-
-## 系统要求
-
-- Python 3.7+
-- Anthropic API密钥
+### 环境要求
+- Python 3.8+
+- SQLite 3
 - 现代浏览器（Chrome/Firefox/Safari）
-- 最小2GB可用内存
-- 500MB可用磁盘空间
 
-## 安装指南
+### 快速开始
 
-1. 克隆仓库：
+1. 克隆仓库
 ```bash
-git clone https://github.com/szqshan/dataAnalyzer.git
-cd dataAnalyzer
+git clone https://github.com/szqshan/DataAnalyzer.git
+cd DataAnalyzer
 ```
 
-2. 创建并激活虚拟环境（推荐）：
+2. 创建虚拟环境
 ```bash
-# Windows
 python -m venv venv
+# Windows
 venv\Scripts\activate
-
 # Linux/Mac
-python3 -m venv venv
 source venv/bin/activate
 ```
 
-3. 安装依赖：
+3. 安装依赖
 ```bash
 pip install -r requirements.txt
 ```
 
-4. 设置环境变量：
+4. 设置环境变量
 ```bash
 # Windows
 set ANTHROPIC_API_KEY=你的API密钥
@@ -100,98 +72,80 @@ set ANTHROPIC_API_KEY=你的API密钥
 export ANTHROPIC_API_KEY=你的API密钥
 ```
 
-5. 初始化数据库：
-```bash
-python init_db.py
-```
-
-## 使用方法
-
-### 启动服务器
-
-1. 运行Web服务器：
+5. 启动服务
 ```bash
 python run_server.py
 ```
 
-2. 访问Web界面：
-```
-http://localhost:5000
-```
+## 📖 使用指南
 
-### 数据分析流程
+### 基本使用流程
 
-1. 登录系统（首次使用需要注册）
-2. 上传CSV文件或选择已有数据集
-3. 在对话框中输入分析需求
-4. 等待系统生成分析报告
-5. 查看和导出分析结果
+1. **数据导入**
+   - 支持CSV文件导入
+   - 支持数据库直连
+   - 支持API数据源
 
-### 示例分析需求
+2. **数据分析**
+   - 选择分析模板
+   - 设置分析参数
+   - 执行分析任务
 
-- "分析过去12个月的销售趋势"
-- "找出客户购买行为的关键影响因素"
-- "生成各产品类别的销售分布图"
+3. **结果查看**
+   - 查看分析报告
+   - 导出分析结果
+   - 分享分析见解
 
-## 项目结构
+### 高级功能
 
-```
-dataAnalyzer/
-├── backend/           # 后端代码
-│   ├── app.py        # Flask应用
-│   └── datatest1_7_5.py  # 核心分析逻辑
-├── frontend/         # 前端代码
-│   ├── index.html    # 主页面
-│   └── api.js        # API调用
-├── data/            # 数据存储
-├── logs/            # 日志文件
-├── reports/         # 生成的报告
-└── requirements.txt # 项目依赖
-```
+- **自定义分析模板**
+- **批量数据处理**
+- **定时分析任务**
+- **协作分析项目**
 
-## API文档
+## 🤝 参与贡献
 
-### REST API端点
+我们欢迎各种形式的贡献，包括但不限于：
 
-- POST /api/analyze - 提交分析请求
-- GET /api/reports - 获取报告列表
-- GET /api/report/{id} - 获取特定报告
-- POST /api/upload - 上传数据文件
+- 提交bug报告
+- 新功能建议
+- 代码贡献
+- 文档改进
 
-详细API文档请参考 [API.md](docs/API.md)
+请查看[贡献指南](CONTRIBUTING.md)了解详细信息。
 
-## 常见问题
+## 📝 文档
 
-1. **Q: 如何处理大型数据集？**
-   A: 建议先进行数据采样或分批处理
+- [API文档](docs/API.md)
+- [用户指南](docs/UserGuide.md)
+- [开发指南](docs/DevelopGuide.md)
+- [更新日志](CHANGELOG.md)
 
-2. **Q: 支持哪些数据格式？**
-   A: 目前主要支持CSV格式，计划添加Excel支持
+## 🔗 相关链接
 
-3. **Q: 如何备份分析记录？**
-   A: 所有记录自动保存在data目录下
+- [项目主页](https://github.com/szqshan/DataAnalyzer)
+- [问题反馈](https://github.com/szqshan/DataAnalyzer/issues)
+- [开发计划](https://github.com/szqshan/DataAnalyzer/projects)
 
-## 更新日志
+## 📄 许可证
 
-### v1.0.0 (2025-06-08)
-- 初始版本发布
-- 支持基本的数据分析功能
-- 多用户支持
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详细信息。
 
-## 贡献指南
+## 👥 团队
 
-1. Fork 项目
-2. 创建特性分支
-3. 提交变更
-4. 推送到分支
-5. 创建Pull Request
+- 项目负责人：szqshan
+- 开发团队：[团队成员列表]
+- 贡献者：[贡献者列表]
 
-## 许可证
+## 📞 联系方式
 
-MIT License
+- 电子邮件：[项目邮箱]
+- 讨论组：[讨论组链接]
+- 社交媒体：[社交媒体链接]
 
----
+## 🙏 鸣谢
 
-# English Version
+感谢所有为本项目做出贡献的开发者和用户。特别感谢：
 
-[To be added in future updates]
+- Anthropic提供的Claude API支持
+- 所有开源依赖项目的贡献者
