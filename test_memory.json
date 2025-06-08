@@ -1,0 +1,145 @@
+{
+  "metadata": {
+    "version": "2.1.0",
+    "description": "完整SQL执行记录和HTML内容保存",
+    "created": "2025-06-04T21:54:33.428356",
+    "total_conversations": 2,
+    "last_updated": "2025-06-04T21:54:33.428358",
+    "file_format": "complete_memory_with_full_sql_history"
+  },
+  "conversations": [
+    {
+      "conversation_id": 1,
+      "timestamp": "2025-06-04T21:54:33.426273",
+      "user_interaction": {
+        "query": "测试查询",
+        "query_type": "general",
+        "keywords": [
+          "测试查询"
+        ]
+      },
+      "ai_analysis": {
+        "full_response": "测试响应",
+        "summary": "数据分析报告",
+        "key_insights": [],
+        "html_output": "",
+        "response_length": 4,
+        "messages": [
+          {
+            "role": "user",
+            "content": "测试查询"
+          },
+          {
+            "role": "assistant",
+            "content": "测试响应"
+          }
+        ]
+      },
+      "database_operations": {
+        "total_tool_calls": 1,
+        "complete_sql_history": [
+          {
+            "sequence": 1,
+            "tool_name": "test_tool",
+            "tool_input": {},
+            "execution_result": {
+              "success": true
+            },
+            "timestamp": "2025-06-04T21:54:33.426285",
+            "success": true,
+            "performance": {
+              "execution_time": 0,
+              "rows_returned": 0
+            }
+          }
+        ],
+        "database_info": {
+          "db_path": "",
+          "table_name": "",
+          "connection_status": "unknown"
+        },
+        "performance_summary": {
+          "total_execution_time": 0,
+          "total_rows_processed": 0,
+          "successful_queries": 1,
+          "failed_queries": 0
+        }
+      },
+      "output_artifacts": {
+        "html_report_file": "",
+        "html_content_size": 0,
+        "analysis_type": "unknown",
+        "report_generated": false
+      },
+      "session_metadata": {
+        "iterations_count": 0,
+        "analysis_duration": "21:54:33",
+        "completion_status": "completed"
+      }
+    },
+    {
+      "conversation_id": 2,
+      "timestamp": "2025-06-04T21:54:33.428307",
+      "user_interaction": {
+        "query": "测试字符串查询",
+        "query_type": "general",
+        "keywords": [
+          "测试字符串查询"
+        ]
+      },
+      "ai_analysis": {
+        "full_response": "测试字符串响应",
+        "summary": "数据分析报告",
+        "key_insights": [],
+        "html_output": "",
+        "response_length": 7,
+        "messages": []
+      },
+      "database_operations": {
+        "total_tool_calls": 0,
+        "complete_sql_history": [],
+        "database_info": {
+          "db_path": "",
+          "table_name": "",
+          "connection_status": "unknown"
+        },
+        "performance_summary": {
+          "total_execution_time": 0,
+          "total_rows_processed": 0,
+          "successful_queries": 0,
+          "failed_queries": 0
+        }
+      },
+      "output_artifacts": {
+        "html_report_file": "",
+        "html_content_size": 0,
+        "analysis_type": "unknown",
+        "report_generated": false
+      },
+      "session_metadata": {
+        "iterations_count": 0,
+        "analysis_duration": "21:54:33",
+        "completion_status": "completed"
+      }
+    }
+  ],
+  "global_statistics": {
+    "total_sql_operations": 1,
+    "successful_sql_queries": 1,
+    "failed_sql_queries": 0,
+    "html_reports_generated": 0,
+    "avg_iterations_per_conversation": 0.0,
+    "total_data_rows_processed": 0,
+    "total_execution_time": 0
+  },
+  "schema_info": {
+    "conversation_structure": {
+      "conversation_id": "Unique identifier for each conversation",
+      "user_interaction": "Complete user query information",
+      "ai_analysis": "Full AI response and HTML content",
+      "database_operations": "Complete SQL execution history with results",
+      "output_artifacts": "Generated files and reports",
+      "session_metadata": "Analysis session information"
+    }
+  }
+}

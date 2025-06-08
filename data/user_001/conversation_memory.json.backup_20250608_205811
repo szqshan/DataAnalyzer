@@ -1,0 +1,75 @@
+{
+  "metadata": {
+    "version": "2.1.0",
+    "description": "完整SQL执行记录和HTML内容保存",
+    "created": "2025-06-08T09:36:07.517008",
+    "total_conversations": 1,
+    "last_updated": "2025-06-08T09:36:07.517012",
+    "file_format": "complete_memory_with_full_sql_history"
+  },
+  "conversations": [
+    {
+      "conversation_id": 1,
+      "timestamp": "2025-06-08T09:36:07.516482",
+      "user_interaction": {
+        "query": "给我分析报告",
+        "query_type": "report_generation",
+        "keywords": [
+          "给我分析报告"
+        ]
+      },
+      "ai_analysis": {
+        "full_response": "",
+        "summary": "数据分析报告",
+        "key_insights": [],
+        "html_output": "",
+        "response_length": 0
+      },
+      "database_operations": {
+        "total_tool_calls": 0,
+        "complete_sql_history": [],
+        "database_info": {
+          "db_path": "data\\user_001\\analysis.db",
+          "table_name": "data_table",
+          "connection_status": "active"
+        },
+        "performance_summary": {
+          "total_execution_time": 0,
+          "total_rows_processed": 0,
+          "successful_queries": 0,
+          "failed_queries": 0
+        }
+      },
+      "output_artifacts": {
+        "html_report_file": "",
+        "html_content_size": 0,
+        "analysis_type": "标准分析",
+        "report_generated": false
+      },
+      "session_metadata": {
+        "iterations_count": 0,
+        "analysis_duration": "09:36:07",
+        "completion_status": "incomplete"
+      }
+    }
+  ],
+  "global_statistics": {
+    "total_sql_operations": 0,
+    "successful_sql_queries": 0,
+    "failed_sql_queries": 0,
+    "html_reports_generated": 0,
+    "avg_iterations_per_conversation": 0.0,
+    "total_data_rows_processed": 0,
+    "total_execution_time": 0
+  },
+  "schema_info": {
+    "conversation_structure": {
+      "conversation_id": "Unique identifier for each conversation",
+      "user_interaction": "Complete user query information",
+      "ai_analysis": "Full AI response and HTML content",
+      "database_operations": "Complete SQL execution history with results",
+      "output_artifacts": "Generated files and reports",
+      "session_metadata": "Analysis session information"
+    }
+  }
+}

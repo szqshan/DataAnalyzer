@@ -1,0 +1,169 @@
+{
+  "metadata": {
+    "version": "2.1.0",
+    "description": "完整SQL执行记录和HTML内容保存",
+    "created": "2025-06-08T22:20:33.707441",
+    "total_conversations": 1,
+    "last_updated": "2025-06-08T22:20:33.707442",
+    "file_format": "complete_memory_with_full_sql_history"
+  },
+  "conversations": [
+    {
+      "conversation_id": 1,
+      "timestamp": "2025-06-08T22:20:33.707038",
+      "user_interaction": {
+        "query": "给我分析报告",
+        "query_type": "report_generation",
+        "keywords": [
+          "给我分析报告"
+        ]
+      },
+      "ai_analysis": {
+        "full_response": "",
+        "summary": "数据分析报告",
+        "key_insights": [],
+        "html_output": "",
+        "response_length": 0
+      },
+      "database_operations": {
+        "total_tool_calls": 1,
+        "complete_sql_history": [
+          {
+            "sequence": 1,
+            "tool_name": "get_table_info",
+            "tool_input": {
+              "json_accumulator": ""
+            },
+            "execution_result": {
+              "table_info": {
+                "table_name": "data_table",
+                "columns": [
+                  {
+                    "name": "项目id",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "同意立项级别",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "项目所属学院",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "类型",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "项目所属专业大类及代码",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "负责人所在年级",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "指导教师职务职称",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "指导教师学历",
+                    "type": "TEXT"
+                  },
+                  {
+                    "name": "当前状态",
+                    "type": "TEXT"
+                  }
+                ],
+                "sample_data": [
+                  {
+                    "项目id": "6746f5137f73de000140125e",
+                    "同意立项级别": "无",
+                    "项目所属学院": "水利与建筑工程学院",
+                    "类型": "创新训练",
+                    "项目所属专业大类及代码": "环境科学与工程类/0825",
+                    "负责人所在年级": "2021级",
+                    "指导教师职务职称": "讲师",
+                    "指导教师学历": "硕士研究生",
+                    "当前状态": "待一级审核"
+                  },
+                  {
+                    "项目id": "6745c6bfebd3c20001bcb3fb",
+                    "同意立项级别": "无",
+                    "项目所属学院": "农学院",
+                    "类型": "创新训练",
+                    "项目所属专业大类及代码": "农业工程类/0823",
+                    "负责人所在年级": "2021级",
+                    "指导教师职务职称": "教授",
+                    "指导教师学历": "无",
+                    "当前状态": "待一级审核"
+                  },
+                  {
+                    "项目id": "6744795516b07c000100cbc6",
+                    "同意立项级别": "无",
+                    "项目所属学院": "水利与建筑工程学院",
+                    "类型": "创新训练",
+                    "项目所属专业大类及代码": "环境科学与工程类/0825",
+                    "负责人所在年级": "2020级",
+                    "指导教师职务职称": "讲师",
+                    "指导教师学历": "硕士研究生",
+                    "当前状态": "待一级审核"
+                  }
+                ]
+              },
+              "query_type": "TABLE_INFO",
+              "execution_time": 0.001
+            },
+            "timestamp": "2025-06-08T22:20:33.707329",
+            "success": true,
+            "performance": {
+              "execution_time": 0.001,
+              "rows_returned": 0
+            }
+          }
+        ],
+        "database_info": {
+          "db_path": "data\\user_001\\analysis.db",
+          "table_name": "data_table",
+          "connection_status": "active"
+        },
+        "performance_summary": {
+          "total_execution_time": 0.001,
+          "total_rows_processed": 0,
+          "successful_queries": 1,
+          "failed_queries": 0
+        }
+      },
+      "output_artifacts": {
+        "html_report_file": "",
+        "html_content_size": 0,
+        "analysis_type": "标准分析",
+        "report_generated": false
+      },
+      "session_metadata": {
+        "iterations_count": 0,
+        "analysis_duration": "22:20:33",
+        "completion_status": "incomplete"
+      }
+    }
+  ],
+  "global_statistics": {
+    "total_sql_operations": 1,
+    "successful_sql_queries": 1,
+    "failed_sql_queries": 0,
+    "html_reports_generated": 0,
+    "avg_iterations_per_conversation": 0.0,
+    "total_data_rows_processed": 0,
+    "total_execution_time": 0.001
+  },
+  "schema_info": {
+    "conversation_structure": {
+      "conversation_id": "Unique identifier for each conversation",
+      "user_interaction": "Complete user query information",
+      "ai_analysis": "Full AI response and HTML content",
+      "database_operations": "Complete SQL execution history with results",
+      "output_artifacts": "Generated files and reports",
+      "session_metadata": "Analysis session information"
+    }
+  }
+}

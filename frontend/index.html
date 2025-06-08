@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 智能数据库分析系统 (多用户版)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- 添加CORS策略元标签 -->
+    <meta http-equiv="Content-Security-Policy" content="connect-src 'self' http://localhost:5000 ws://localhost:5000 http://127.0.0.1:5000 ws://127.0.0.1:5000;">
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .main-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            margin: 20px auto;
+            max-width: 1400px;
+        }
+        
+        .chat-container {
+            height: 600px;
+            background: #f8f9fa;
+            border-radius: 15px;
+            overflow-y: auto;
+            padding: 20px;
+            border: 2px solid #e9ecef;
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .user-message {
+            text-align: right;
+        }
+        
+        .user-message .message-bubble {
+            background: var(--primary-gradient);
+            color: white;
+            border-radius: 20px 20px 5px 20px;
+            padding: 15px 20px;
+            display: inline-block;
+            max-width: 80%;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .ai-message .message-bubble {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 20px 20px 20px 5px;
+            padding: 15px 20px;
+            display: inline-block;
+            max-width: 80%;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .system-message {
+            text-align: center;
+            margin: 10px 0;
+        }
+        
+        .system-message .message-bubble {
+            background: var(--warning-gradient);
+            color: white;
+            border-radius: 15px;
+            padding: 8px 15px;
+            display: inline-block;
+            font-size: 0.9em;
+            box-shadow: 0 2px 10px rgba(250, 112, 154, 0.3);
+        }
+        
+        .status-card {
+            background: var(--success-gradient);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+        }
+        
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: none;
+            height: 100%;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+        }
+        
+        .btn-gradient {
+            background: var(--primary-gradient);
+            border: none;
+            color: white;
+            border-radius: 10px;
+            padding: 12px 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-gradient:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+        
+        .btn-outline-gradient {
+            background: transparent;
+            border: 2px solid #667eea;
+            color: #667eea;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-outline-gradient:hover {
+            background: var(--primary-gradient);
+            border-color: transparent;
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .spinner-border-custom {
+            width: 3rem;
+            height: 3rem;
+            border: 0.25em solid currentColor;
+            border-right-color: transparent;
+        }
+        
+        .file-upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px 20px;
+            text-align: center;
+            background: rgba(102, 126, 234, 0.05);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .file-upload-area:hover {
+            border-color: #764ba2;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .file-upload-area.dragover {
+            border-color: #764ba2;
+            background: rgba(102, 126, 234, 0.15);
+            transform: scale(1.02);
+        }
+        
+        .sql-display {
+            background: #2d3748;
+            color: #e2e8f0;
+            border-radius: 10px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            margin: 10px 0;
+            border-left: 4px solid #667eea;
+        }
+        
+        .memory-card {
+            background: linear-gradient(135deg, #667eea20, #764ba220);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .navbar-brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .sidebar {
+            height: calc(100vh - 100px);
+            overflow-y: auto;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        
+        .main-content {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 20px;
+            height: calc(100vh - 100px);
+        }
+        
+        .tab-content {
+            height: calc(100% - 60px);
+            overflow-y: auto;
+        }
+        
+        .nav-pills .nav-link.active {
+            background: var(--primary-gradient);
+            border-radius: 10px;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .alert-custom {
+            border: none;
+            border-radius: 10px;
+            padding: 15px 20px;
+        }
+        
+        .progress-custom {
+            height: 8px;
+            border-radius: 4px;
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .progress-custom .progress-bar {
+            background: var(--primary-gradient);
+            border-radius: 4px;
+        }
+        
+        .connection-indicator {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .connection-indicator::before {
+            content: '';
+            position: absolute;
+            left: -15px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #dc3545;
+            animation: pulse 2s infinite;
+        }
+        
+        .connection-indicator.connected::before {
+            background: #28a745;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* 流式显示样式 */
+        .streaming-content {
+            position: relative;
+        }
+        
+        .status-indicators {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        
+        .typing-indicator .dot {
+            height: 8px;
+            width: 8px;
+            margin: 0 2px;
+            background-color: #999;
+            border-radius: 50%;
+            display: inline-block;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% {
+                transform: scale(0.8);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .ai-response-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            line-height: 1.6;
+        }
+        
+        .sql-display code {
+            color: #e2e8f0;
+            background: transparent;
+        }
+        
+        .badge {
+            font-size: 0.75em;
+        }
+        
+        .status-indicators .badge {
+            animation: fadeIn 0.3s ease-in;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* 进度条样式 */
+        .progress-custom {
+            height: 6px;
+            border-radius: 3px;
+            background-color: rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        
+        /* 渐入动画 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* 状态指示器容器 */
+        .status-indicators {
+            margin-top: 8px;
+            margin-bottom: 8px;
+        }
+        
+        /* 打字指示器样式增强 */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            margin-top: 5px;
+            background: rgba(0,0,0,0.03);
+            border-radius: 12px;
+            width: fit-content;
+        }
+        
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            margin: 0 1px;
+            background-color: #999;
+            border-radius: 50%;
+            display: inline-block;
+            opacity: 0.4;
+        }
+        
+        .typing-indicator span:nth-child(1) {
+            animation: pulse 1s infinite 0.1s;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation: pulse 1s infinite 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation: pulse 1s infinite 0.3s;
+        }
+        
+        .typing-indicator span:nth-child(4) {
+            animation: pulse 1s infinite 0.4s;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.3); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.4; }
+        }
+        
+        /* SQL显示区域增强 */
+        .sql-display {
+            background-color: rgba(0,0,0,0.02);
+            border-radius: 5px;
+            padding: 8px;
+            border-left: 3px solid #6c757d;
+        }
+        
+        .sql-display code {
+            display: block;
+            white-space: pre-wrap;
+            padding: 5px;
+            background-color: rgba(0,0,0,0.03);
+            border-radius: 3px;
+            font-size: 0.85rem;
+            color: #333;
+        }
+        
+        /* 警告框样式增强 */
+        .alert-custom {
+            border-radius: 5px;
+            margin-bottom: 8px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <nav class="navbar navbar-expand-lg navbar-dark" style="background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px);">
+        <div class="container-fluid">
+            <span class="navbar-brand">🤖 智能数据库分析系统 (多用户版)</span>
+            <div class="navbar-nav ms-auto">
+                <span class="nav-link text-white" id="user-display">
+                    <i class="bi bi-person-circle"></i> 正在识别用户...
+                </span>
+                <span class="nav-link text-white">
+                    <i class="bi bi-database"></i> 
+                    <span id="connection-status" class="connection-indicator">检查中...</span>
+                </span>
+                <button class="btn btn-outline-light btn-sm ms-2" onclick="userManager.switchUser()" title="切换用户">
+                    <i class="bi bi-person-gear"></i>
+                </button>
+                <button class="btn btn-outline-light btn-sm ms-1" onclick="userManager.logout()" title="退出登录">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4">
+        <div class="row">
+            <!-- 左侧边栏 -->
+            <div class="col-md-3">
+                <div class="sidebar">
+                    <!-- 用户状态和数据库状态合并卡片 -->
+                    <div class="status-card">
+                        <!-- 用户信息将由 userManager 动态添加 -->
+                        <h6><i class="bi bi-database-fill"></i> 数据库状态</h6>
+                        <div id="db-status">
+                            <small>数据库: <span id="db-path">检查中...</span></small><br>
+                            <small>表名: <span id="table-name">N/A</span></small><br>
+                            <small>记录数: <span id="record-count">0</span></small>
+                        </div>
+                    </div>
+
+                    <!-- 快速操作 -->
+                    <div class="card feature-card mb-3">
+                        <h6><i class="bi bi-lightning-fill"></i> 快速操作</h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-gradient btn-sm" onclick="showTab('upload')">
+                                <i class="bi bi-upload"></i> 上传数据
+                            </button>
+                            <button class="btn btn-outline-gradient btn-sm" onclick="showTab('analysis')">
+                                <i class="bi bi-chat-dots"></i> 智能分析
+                            </button>
+                            <button class="btn btn-outline-gradient btn-sm" onclick="showComingSoon('查看记忆')">
+                                <i class="bi bi-journal-text"></i> 查看记忆
+                            </button>
+                            <button class="btn btn-outline-gradient btn-sm" onclick="showComingSoon('清空记忆')">
+                                <i class="bi bi-trash"></i> 清空记忆
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 分析统计 -->
+                    <div class="card feature-card mb-3">
+                        <h6><i class="bi bi-graph-up"></i> 分析统计</h6>
+                        <div id="memory-stats">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <div class="h4 text-primary mb-0" id="conversation-count">0</div>
+                                    <small class="text-muted">对话数</small>
+                                </div>
+                                <div class="col-6">
+                                    <div class="h4 text-success mb-0" id="sql-count">0</div>
+                                    <small class="text-muted">SQL查询</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 用户管理工具 -->
+                    <div class="card feature-card">
+                        <h6><i class="bi bi-people"></i> 用户管理</h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-gradient btn-sm" onclick="showUsersList()">
+                                <i class="bi bi-list"></i> 所有用户
+                            </button>
+                            <button class="btn btn-outline-gradient btn-sm" onclick="userManager.switchUser()">
+                                <i class="bi bi-person-plus"></i> 切换用户
+                            </button>
+                            <button class="btn btn-outline-gradient btn-sm" onclick="showUserStats()">
+                                <i class="bi bi-pie-chart"></i> 用户统计
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 主内容区 -->
+            <div class="col-md-9">
+                <div class="main-content">
+                    <!-- 选项卡导航 -->
+                    <ul class="nav nav-pills mb-3" id="main-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-tab="upload" href="#upload-tab">
+                                <i class="bi bi-upload"></i> 数据上传
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-tab="analysis" href="#analysis-tab">
+                                <i class="bi bi-chat-dots"></i> 智能分析
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-tab="memory" href="#memory-tab">
+                                <i class="bi bi-journal-text"></i> 分析记忆 <span class="badge bg-warning">开发中</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-tab="results" href="#results-tab">
+                                <i class="bi bi-file-earmark-text"></i> 结果报告 <span class="badge bg-warning">开发中</span>
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 选项卡内容 -->
+                    <div class="tab-content">
+                        <!-- 数据上传标签页 -->
+                        <div id="upload-tab" class="tab-pane active">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="file-upload-area" id="file-upload-area">
+                                        <i class="bi bi-cloud-upload display-1 text-primary mb-3"></i>
+                                        <h5>拖拽CSV文件到这里</h5>
+                                        <p class="text-muted">或者点击选择文件</p>
+                                        <p class="text-muted"><small>每个用户的数据将独立存储</small></p>
+                                        <input type="file" id="csv-file" accept=".csv" style="display: none;">
+                                        <button class="btn btn-gradient mt-2" onclick="document.getElementById('csv-file').click()">
+                                            选择文件
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card feature-card">
+                                        <h6><i class="bi bi-gear"></i> 导入设置</h6>
+                                        <div class="mb-3">
+                                            <label class="form-label">表名</label>
+                                            <input type="text" class="form-control" id="table-name-input" value="data_table" placeholder="输入表名">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">数据库名称</label>
+                                            <input type="text" class="form-control" id="db-path-input" value="analysis.db" placeholder="数据库文件名">
+                                            <small class="text-muted">将自动保存到您的专属目录</small>
+                                        </div>
+                                        <button class="btn btn-gradient w-100" id="upload-btn" disabled>
+                                            <i class="bi bi-upload"></i> 开始导入
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 上传进度 -->
+                            <div id="upload-progress" class="mt-4" style="display: none;">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6><i class="bi bi-hourglass-split"></i> 正在处理...</h6>
+                                        <div class="progress progress-custom">
+                                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                        </div>
+                                        <small class="text-muted mt-2 d-block" id="upload-status">准备上传...</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 智能分析标签页 -->
+                        <div id="analysis-tab" class="tab-pane">
+                            <div class="row h-100">
+                                <div class="col-12">
+                                    <!-- 分析聊天界面 -->
+                                    <div class="chat-container" id="chat-container">
+                                        <div class="message system-message">
+                                            <div class="message-bubble">
+                                                🤖 智能分析助手已就绪，支持多用户数据隔离
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 输入区域 -->
+                                    <div class="mt-3">
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" id="analysis-input" 
+                                                   placeholder="请描述您的分析需求..." style="border-radius: 10px 0 0 10px;">
+                                            <button class="btn btn-gradient" id="send-analysis" style="border-radius: 0 10px 10px 0;">
+                                                <i class="bi bi-send"></i> 发送
+                                            </button>
+                                        </div>
+                                        <div class="mt-2">
+                                            <small class="text-muted">
+                                                💡 示例: "分析数据基本情况" | "生成销售报告" | "检查异常值"
+                                            </small>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- 加载状态 -->
+                                    <div class="loading-spinner" id="analysis-loading">
+                                        <div class="spinner-border spinner-border-custom text-primary" role="status">
+                                            <span class="visually-hidden">分析中...</span>
+                                        </div>
+                                        <p class="mt-2 text-muted">Claude正在为您进行专属分析...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 分析记忆标签页 -->
+                        <div id="memory-tab" class="tab-pane">
+                            <div class="alert alert-info alert-custom">
+                                <h6><i class="bi bi-info-circle"></i> 功能开发中</h6>
+                                <p class="mb-0">多用户记忆管理功能正在开发中，敬请期待！</p>
+                                <small class="text-muted">将在P1阶段完成此功能</small>
+                            </div>
+                        </div>
+
+                        <!-- 结果报告标签页 -->
+                        <div id="results-tab" class="tab-pane">
+                            <div class="alert alert-info alert-custom">
+                                <h6><i class="bi bi-info-circle"></i> 功能开发中</h6>
+                                <p class="mb-0">多用户报告管理功能正在开发中，敬请期待！</p>
+                                <small class="text-muted">将在P1阶段完成此功能</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- 用户管理脚本 -->
+    <script src="user_manager.js"></script>
+    
+    <!-- API类脚本 -->
+    <script src="api.js"></script>
+    
+    <script>
+        // 全局状态管理
+        let currentState = {
+            dbConnected: false,
+            dbPath: '',
+            tableName: '',
+            recordCount: 0,
+            conversationCount: 0,
+            sqlCount: 0,
+            backendConnected: false,
+            currentAnalysisId: null,
+            isAnalyzing: false
+        };
+
+        // 系统状态检查
+        async function checkSystemStatus() {
+            const connectionIndicator = document.getElementById('connection-status');
+            
+            try {
+                connectionIndicator.textContent = '连接中...';
+                connectionIndicator.className = 'connection-indicator';
+                
+                const status = await api.getSystemStatus();
+                
+                // 更新连接状态
+                currentState.backendConnected = true;
+                connectionIndicator.textContent = '已连接';
+                connectionIndicator.className = 'connection-indicator connected';
+                
+                // 更新数据库状态
+                if (status.database_connected) {
+                    updateDBStatus(
+                        status.database_path,
+                        status.table_name,
+                        status.record_count
+                    );
+                } else {
+                    document.getElementById('db-path').textContent = '未连接';
+                    document.getElementById('table-name').textContent = 'N/A';
+                    document.getElementById('record-count').textContent = '0';
+                }
+                
+                // 更新统计信息
+                if (status.memory_stats) {
+                    currentState.conversationCount = status.memory_stats.conversation_count || 0;
+                    currentState.sqlCount = status.memory_stats.total_sql_calls || 0;
+                    updateStats();
+                }
+                
+                return status;
+                
+            } catch (error) {
+                currentState.backendConnected = false;
+                connectionIndicator.textContent = '连接失败';
+                connectionIndicator.className = 'connection-indicator';
+                
+                console.error('系统状态检查失败:', error);
+                return null;
+            }
+        }
+
+        // 更新数据库状态
+        function updateDBStatus(dbPath, tableName, recordCount) {
+            currentState.dbConnected = true;
+            currentState.dbPath = dbPath;
+            currentState.tableName = tableName;
+            currentState.recordCount = recordCount;
+
+            document.getElementById('db-path').textContent = dbPath || '未知';
+            document.getElementById('table-name').textContent = tableName || 'N/A';
+            document.getElementById('record-count').textContent = recordCount.toLocaleString();
+        }
+
+        // 更新统计信息
+        function updateStats() {
+            document.getElementById('conversation-count').textContent = currentState.conversationCount;
+            document.getElementById('sql-count').textContent = currentState.sqlCount;
+        }
+
+        // 选项卡切换
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-pane').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+            
+            document.getElementById(tabName + '-tab').classList.add('active');
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+        }
+
+        // 导航点击事件
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const tabName = link.getAttribute('data-tab');
+                showTab(tabName);
+            });
+        });
+
+        // 文件上传处理
+        const fileUploadArea = document.getElementById('file-upload-area');
+        const csvFileInput = document.getElementById('csv-file');
+        const uploadBtn = document.getElementById('upload-btn');
+
+        fileUploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileUploadArea.classList.add('dragover');
+        });
+
+        fileUploadArea.addEventListener('dragleave', () => {
+            fileUploadArea.classList.remove('dragover');
+        });
+
+        fileUploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileUploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && files[0].name.endsWith('.csv')) {
+                handleFileSelection(files[0]);
+            }
+        });
+
+        fileUploadArea.addEventListener('click', () => {
+            csvFileInput.click();
+        });
+
+        csvFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelection(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelection(file) {
+            console.log('选择的文件:', file.name);
+            uploadBtn.disabled = false;
+            
+            const user = userManager.getCurrentUser();
+            const userInfo = user ? `用户: ${user.username}` : '未登录用户';
+            
+            fileUploadArea.innerHTML = `
+                <i class="bi bi-file-earmark-check display-1 text-success mb-3"></i>
+                <h5>文件已选择: ${file.name}</h5>
+                <p class="text-muted">大小: ${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                <p class="text-muted">${userInfo}</p>
+                <button class="btn btn-outline-gradient mt-2" onclick="document.getElementById('csv-file').click()">
+                    重新选择
+                </button>
+            `;
+        }
+
+        // 文件上传函数
+        async function uploadFile(file, tableName, dbPath) {
+            const progressDiv = document.getElementById('upload-progress');
+            const progressBar = progressDiv.querySelector('.progress-bar');
+            const statusText = document.getElementById('upload-status');
+            
+            progressDiv.style.display = 'block';
+            uploadBtn.disabled = true;
+            
+            try {
+                // 检查用户是否已登录
+                if (!userManager.isLoggedIn()) {
+                    throw new Error('请先完成用户身份识别');
+                }
+                
+                // 检查后端连接
+                if (!currentState.backendConnected) {
+                    throw new Error('后端服务未连接，请检查服务是否启动');
+                }
+                
+                const user = userManager.getCurrentUser();
+                statusText.textContent = `用户 ${user.username} 正在上传文件...`;
+                console.log(`开始上传文件: ${file.name}, 大小: ${file.size} 字节`);
+                
+                // 显示上传进度
+                let progress = 0;
+                const progressInterval = setInterval(() => {
+                    progress += Math.random() * 5;
+                    if (progress > 90) progress = 90;
+                    progressBar.style.width = progress + '%';
+                    statusText.textContent = `用户 ${user.username} 上传中... ${Math.round(progress)}%`;
+                }, 300);
+                
+                // 调用真实API
+                try {
+                    console.log(`调用API上传文件: ${file.name}, 表名: ${tableName}`);
+                    const result = await api.uploadCSV(file, tableName, dbPath);
+                    console.log("上传成功，服务器返回:", result);
+                    
+                    // 清除进度动画
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    statusText.textContent = '上传成功！数据已保存到用户专属目录';
+                    
+                    // 更新数据库状态
+                    updateDBStatus(
+                        result.data.db_path,
+                        result.data.table_name,
+                        result.data.rows_imported
+                    );
+                    
+                    setTimeout(() => {
+                        progressDiv.style.display = 'none';
+                        uploadBtn.disabled = false;
+                        showSuccessMessage(`${result.message} (用户: ${user.username})`);
+                        showTab('analysis');
+                    }, 1000);
+                } catch (apiError) {
+                    clearInterval(progressInterval);
+                    console.error("API调用失败:", apiError);
+                    statusText.textContent = `上传失败: ${apiError.message}`;
+                    progressBar.style.width = '0%';
+                    progressBar.className = 'progress-bar bg-danger';
+                    uploadBtn.disabled = false;
+                    showErrorMessage(`上传失败: ${apiError.message}`);
+                    
+                    // 尝试重新检查连接
+                    setTimeout(async () => {
+                        try {
+                            await api.healthCheck();
+                            progressBar.className = 'progress-bar';
+                            statusText.textContent = '服务器连接正常，请重试上传';
+                        } catch (e) {
+                            statusText.textContent = '无法连接到服务器，请检查服务是否启动';
+                        }
+                    }, 2000);
+                }
+                
+            } catch (error) {
+                statusText.textContent = '上传失败: ' + error.message;
+                progressBar.style.width = '0%';
+                progressBar.className = 'progress-bar bg-danger';
+                uploadBtn.disabled = false;
+                showErrorMessage('上传失败: ' + error.message);
+            }
+        }
+
+        uploadBtn.addEventListener('click', async () => {
+            const file = csvFileInput.files[0];
+            if (!file) {
+                showErrorMessage('请先选择文件');
+                return;
+            }
+
+            const tableName = document.getElementById('table-name-input').value.trim();
+            const dbPath = document.getElementById('db-path-input').value.trim();
+
+            if (!tableName || !dbPath) {
+                showErrorMessage('请填写表名和数据库路径');
+                return;
+            }
+            
+            console.log(`准备上传文件: ${file.name}, 表名: ${tableName}, 数据库: ${dbPath}`);
+            await uploadFile(file, tableName, dbPath);
+        });
+
+        // 流式智能分析处理
+        const analysisInput = document.getElementById('analysis-input');
+        const sendAnalysisBtn = document.getElementById('send-analysis');
+        const chatContainer = document.getElementById('chat-container');
+        const analysisLoading = document.getElementById('analysis-loading');
+
+        sendAnalysisBtn.addEventListener('click', sendAnalysisStream);
+        analysisInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !currentState.isAnalyzing) {
+                sendAnalysisStream();
+            }
+        });
+
+        // 发送流式分析请求
+        async function sendAnalysisStream() {
+            const user = userManager.getCurrentUser();
+            
+            if (!user) {
+                showErrorMessage("请先登录再进行分析");
+                return;
+            }
+            
+            if (!currentState.backendConnected) {
+                showErrorMessage("后端服务未连接，请稍后再试");
+                return;
+            }
+            
+            if (!currentState.dbConnected) {
+                showErrorMessage("数据库未连接，请先上传或选择数据");
+                return;
+            }
+            
+            const query = analysisInput.value.trim();
+            if (!query) {
+                showErrorMessage("请输入分析需求");
+                return;
+            }
+            
+            // 禁用输入和按钮
+            analysisInput.disabled = true;
+            sendAnalysisBtn.disabled = true;
+            
+            try {
+                // 添加用户消息到聊天界面
+                const messageId = 'message-' + Date.now();
+                const messageDiv = createStreamingMessageContainer(messageId, query);
+                chatContainer.appendChild(messageDiv);
+                
+                // 自动滚动到底部
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                
+                // 获取消息容器中的状态指示器和AI响应内容
+                const statusIndicators = messageDiv.querySelector('.status-indicators');
+                const aiResponseContent = messageDiv.querySelector('.ai-response-content');
+                const typingIndicator = messageDiv.querySelector('.typing-indicator');
+                
+                // 显示初始状态
+                statusIndicators.innerHTML = `
+                    <div class="alert alert-info alert-custom py-2">
+                        <div class="d-flex align-items-center">
+                            <div class="spinner-border spinner-border-sm me-2" role="status">
+                                <span class="visually-hidden">连接中...</span>
+                            </div>
+                            <small>正在连接分析服务...</small>
+                        </div>
+                    </div>`;
+                
+                // 添加进度条
+                const progressDiv = document.createElement('div');
+                progressDiv.className = 'progress progress-custom mt-2';
+                progressDiv.innerHTML = `<div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 5%"></div>`;
+                progressDiv.id = `${messageId}-progress`;
+                statusIndicators.appendChild(progressDiv);
+                
+                // 添加状态文本
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'text-center mt-1';
+                statusDiv.innerHTML = `<small class="text-muted" id="${messageId}-status">初始化分析请求...</small>`;
+                statusIndicators.appendChild(statusDiv);
+                
+                // 显示打字指示器
+                typingIndicator.style.display = 'flex';
+                
+                // 发起流式请求
+                const response = await api.analyzeStream(query);
+                
+                // 处理流式响应
+                processStreamingResponse(response, messageId);
+                
+                // 更新统计信息
+                updateStats();
+                
+            } catch (error) {
+                console.error('流式分析请求失败:', error);
+                
+                // 显示错误信息
+                const errorMsg = error.message || '连接分析服务失败';
+                handleStreamingData({
+                    type: 'error',
+                    message: errorMsg
+                }, messageId);
+                
+                showErrorMessage(`分析请求失败: ${errorMsg}`);
+            } finally {
+                // 恢复输入和按钮
+                analysisInput.disabled = false;
+                sendAnalysisBtn.disabled = false;
+                analysisInput.focus();
+            }
+        }
+
+        // 处理流式响应
+        function processStreamingResponse(response, messageId) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            
+            console.log('开始处理流式响应');
+            
+            // 显示初始状态
+            handleStreamingData({
+                type: 'start',
+                message: '正在连接分析服务...'
+            }, messageId);
+            
+            // 处理数据流
+            function processStream() {
+                reader.read().then(({ done, value }) => {
+                    if (done) {
+                        console.log('流式响应完成');
+                        
+                        // 处理缓冲区中的最后数据
+                        if (buffer.trim()) {
+                            try {
+                                processBufferData(buffer, messageId);
+                            } catch (e) {
+                                console.error('处理最终缓冲数据失败:', e);
+                            }
+                        }
+                        
+                        // 确保显示完成状态
+                        handleStreamingData({
+                            type: 'complete',
+                            message: '分析完成'
+                        }, messageId);
+                        
+                        return;
+                    }
+                    
+                    // 解码并添加到缓冲区
+                    const chunk = decoder.decode(value, { stream: true });
+                    console.log(`接收到数据块: ${chunk.length} 字符`);
+                    buffer += chunk;
+                    
+                    // 处理缓冲区数据
+                    try {
+                        processBufferData(buffer, messageId);
+                        
+                        // 清理已处理的数据，保留可能不完整的最后一行
+                        const lastNewlineIndex = buffer.lastIndexOf('\n');
+                        if (lastNewlineIndex !== -1) {
+                            buffer = buffer.substring(lastNewlineIndex + 1);
+                        }
+                        
+                        // 防止缓冲区过大
+                        if (buffer.length > 10000) {
+                            buffer = buffer.substring(buffer.length - 5000);
+                            console.warn('缓冲区过大，已截断');
+                        }
+                    } catch (e) {
+                        console.error('处理缓冲数据失败:', e);
+                    }
+                    
+                    // 继续处理流
+                    processStream();
+                }).catch(error => {
+                    console.error('读取流失败:', error);
+                    handleStreamingData({
+                        type: 'error',
+                        message: '读取数据流失败: ' + error.message
+                    }, messageId);
+                });
+            }
+            
+            // 开始处理流
+            processStream();
+        }
+        
+        // 处理缓冲区数据
+        function processBufferData(buffer, messageId) {
+            // 按行分割
+            const lines = buffer.split('\n');
+            
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                
+                // 检查是否是SSE格式数据
+                if (line.startsWith('data: ')) {
+                    const jsonStr = line.substring(6);
+                    try {
+                        const data = JSON.parse(jsonStr);
+                        handleStreamingData(data, messageId);
+                    } catch (e) {
+                        console.warn('解析JSON失败 (SSE格式):', jsonStr, e);
+                    }
+                } else {
+                    // 尝试直接解析JSON
+                    try {
+                        const data = JSON.parse(line);
+                        handleStreamingData(data, messageId);
+                    } catch (e) {
+                        // 不是有效的JSON，可能是部分数据或其他格式
+                        console.debug('行不是有效JSON:', line.substring(0, 100) + (line.length > 100 ? '...' : ''));
+                    }
+                }
+            }
+        }
+
+        // 创建消息容器
+        function createStreamingMessageContainer(messageId, userMessage) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message-container mb-4';
+            messageDiv.id = messageId;
+            
+            // 用户消息部分
+            const userMessageDiv = document.createElement('div');
+            userMessageDiv.className = 'user-message mb-2';
+            userMessageDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="user-avatar me-2">
+                        <img src="assets/img/user-avatar.png" alt="User" width="32" height="32" class="rounded-circle">
+                    </div>
+                    <div class="user-message-content">
+                        <div class="mb-1"><strong>您</strong> <small class="text-muted">${new Date().toLocaleTimeString()}</small></div>
+                        <div>${userMessage}</div>
+                    </div>
+                </div>
+            `;
+            
+            // AI回复部分
+            const aiMessageDiv = document.createElement('div');
+            aiMessageDiv.className = 'ai-message mt-2';
+            aiMessageDiv.innerHTML = `
+                <div class="d-flex align-items-start">
+                    <div class="ai-avatar me-2">
+                        <img src="assets/img/ai-avatar.png" alt="AI" width="32" height="32" class="rounded-circle">
+                    </div>
+                    <div class="ai-message-content flex-grow-1">
+                        <div class="mb-1"><strong>智能分析助手</strong> <small class="text-muted">${new Date().toLocaleTimeString()}</small></div>
+                        <div class="status-indicators"></div>
+                        <div class="ai-response-content"></div>
+                        <div class="typing-indicator" style="display: none;">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            messageDiv.appendChild(userMessageDiv);
+            messageDiv.appendChild(aiMessageDiv);
+            
+            return messageDiv;
+        }
+
+        // 处理流式数据
+        function handleStreamingData(data, messageId) {
+            const messageDiv = document.getElementById(messageId);
+            if (!messageDiv) return;
+            
+            const statusIndicators = messageDiv.querySelector('.status-indicators');
+            const aiResponseContent = messageDiv.querySelector('.ai-response-content');
+            const typingIndicator = messageDiv.querySelector('.typing-indicator');
+            
+            console.log('处理数据类型:', data.type);
+            
+            // 确保打字指示器显示
+            if (data.type !== 'complete' && data.type !== 'error') {
+                typingIndicator.style.display = 'flex';
+            }
+            
+            switch (data.type) {
+                case 'start':
+                    statusIndicators.innerHTML = `
+                        <div class="alert alert-info alert-custom py-2">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border spinner-border-sm me-2" role="status">
+                                    <span class="visually-hidden">加载中...</span>
+                                </div>
+                                <small>${data.message}</small>
+                            </div>
+                        </div>`;
+                    
+                    // 添加进度条
+                    const progressDiv = document.createElement('div');
+                    progressDiv.className = 'progress progress-custom mt-2';
+                    progressDiv.innerHTML = `<div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 5%"></div>`;
+                    progressDiv.id = `${messageId}-progress`;
+                    statusIndicators.appendChild(progressDiv);
+                    
+                    // 添加状态文本
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'text-center mt-1';
+                    statusDiv.innerHTML = `<small class="text-muted" id="${messageId}-status">正在启动分析引擎...</small>`;
+                    statusIndicators.appendChild(statusDiv);
+                    break;
+                    
+                case 'status':
+                    // 更新状态文本
+                    const statusText = document.getElementById(`${messageId}-status`);
+                    if (statusText) {
+                        statusText.textContent = data.message;
+                    }
+                    
+                    const statusBadge = document.createElement('span');
+                    statusBadge.className = 'badge bg-secondary me-1 mb-1 fade-in';
+                    statusBadge.innerHTML = `<small>${data.message}</small>`;
+                    statusIndicators.appendChild(statusBadge);
+                    
+                    // 更新进度条
+                    updateProgressBar(messageId, 10, 20);
+                    break;
+                    
+                case 'ai_response':
+                    // 实时显示AI回复内容
+                    if (data.content) {
+                        aiResponseContent.innerHTML += data.content;
+                        
+                        // 更新状态文本
+                        const responseStatus = document.getElementById(`${messageId}-status`);
+                        if (responseStatus) {
+                            responseStatus.textContent = `正在生成分析报告...`;
+                        }
+                        
+                        // 更新进度条 - 当有AI响应时，进度至少达到70%
+                        updateProgressBar(messageId, 70, 85);
+                        
+                        // 自动滚动到底部
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }
+                    break;
+                    
+                case 'complete':
+                    typingIndicator.style.display = 'none';
+                    const completeBadge = document.createElement('div');
+                    completeBadge.className = 'alert alert-success alert-custom py-2 mt-2 fade-in';
+                    completeBadge.innerHTML = `<small><strong>${data.message}</strong></small>`;
+                    statusIndicators.appendChild(completeBadge);
+                    
+                    // 更新状态文本
+                    const completeStatus = document.getElementById(`${messageId}-status`);
+                    if (completeStatus) {
+                        completeStatus.textContent = `分析完成！`;
+                    }
+                    
+                    // 更新进度条到100%
+                    updateProgressBar(messageId, 100);
+                    break;
+                    
+                case 'error':
+                    typingIndicator.style.display = 'none';
+                    const errorBadge = document.createElement('div');
+                    errorBadge.className = 'alert alert-danger alert-custom py-2 mt-2 fade-in';
+                    errorBadge.innerHTML = `<small><strong>❌ ${data.message}</strong></small>`;
+                    statusIndicators.appendChild(errorBadge);
+                    
+                    // 更新状态文本
+                    const errorStatus = document.getElementById(`${messageId}-status`);
+                    if (errorStatus) {
+                        errorStatus.textContent = `分析出错: ${data.message}`;
+                    }
+                    
+                    // 更新进度条显示错误
+                    const errorProgressBar = document.querySelector(`#${messageId}-progress .progress-bar`);
+                    if (errorProgressBar) {
+                        errorProgressBar.className = 'progress-bar bg-danger';
+                        errorProgressBar.style.width = '100%';
+                    }
+                    break;
+                
+                default:
+                    console.log('未处理的数据类型:', data.type, data);
+                    break;
+            }
+            
+            // 自动滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // 更新进度条
+        function updateProgressBar(messageId, progress, maxProgress = null) {
+            const progressBar = document.querySelector(`#${messageId}-progress .progress-bar`);
+            if (progressBar) {
+                // 如果提供了最大进度，则随机生成一个在当前进度和最大进度之间的值
+                if (maxProgress !== null) {
+                    const currentWidth = parseFloat(progressBar.style.width) || 0;
+                    if (currentWidth < progress) {
+                        progress = currentWidth + Math.random() * (maxProgress - currentWidth);
+                    }
+                }
+                
+                progressBar.style.width = `${progress}%`;
+            }
+        }
+
+        // 添加普通消息
+        function addMessage(content, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.className = 'message-bubble';
+            bubbleDiv.innerHTML = content;
+            
+            messageDiv.appendChild(bubbleDiv);
+            chatContainer.appendChild(messageDiv);
+            
+            // 滚动到底部
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 用户管理相关函数
+        async function showUsersList() {
+            try {
+                const result = await api.getAllUsers();
+                
+                let html = `
+                    <h6>👥 所有用户列表 (${result.total_users}个)</h6>
+                    <small class="text-muted">活跃分析器: ${result.active_analyzers}个</small>
+                    <hr>
+                `;
+                
+                if (result.users.length === 0) {
+                    html += '<p class="text-muted">暂无用户记录</p>';
+                } else {
+                    result.users.forEach(user => {
+                        const isCurrentUser = userManager.getCurrentUser()?.userId === user.user_id;
+                        html += `
+                            <div class="border rounded p-3 mb-2 ${isCurrentUser ? 'bg-light' : ''}">
+                                <div class="d-flex justify-content-between">
+                                    <strong>${user.username} ${isCurrentUser ? '(当前用户)' : ''}</strong>
+                                    <small class="text-muted">${user.user_id}</small>
+                                </div>
+                                <div class="row mt-2 text-center">
+                                    <div class="col-3">
+                                        <small class="text-muted">数据库</small><br>
+                                        <span class="badge bg-${user.stats.has_database ? 'success' : 'secondary'}">
+                                            ${user.stats.has_database ? '✅' : '❌'}
+                                        </span>
+                                    </div>
+                                    <div class="col-3">
+                                        <small class="text-muted">记忆</small><br>
+                                        <span class="badge bg-${user.stats.has_memory ? 'success' : 'secondary'}">
+                                            ${user.stats.has_memory ? '✅' : '❌'}
+                                        </span>
+                                    </div>
+                                    <div class="col-3">
+                                        <small class="text-muted">报告</small><br>
+                                        <span class="badge bg-info">${user.stats.reports_count}</span>
+                                    </div>
+                                    <div class="col-3">
+                                        <small class="text-muted">大小</small><br>
+                                        <span class="badge bg-warning">${(user.stats.total_size / 1024).toFixed(1)}KB</span>
+                                    </div>
+                                </div>
+                                <small class="text-muted">最后活动: ${user.last_activity}</small>
+                            </div>
+                        `;
+                    });
+                }
+                
+                showInfoModal('用户列表', html);
+                
+            } catch (error) {
+                showErrorMessage('获取用户列表失败: ' + error.message);
+            }
+        }
+
+        async function showUserStats() {
+            try {
+                const currentUser = userManager.getCurrentUser();
+                if (!currentUser) {
+                    showErrorMessage('请先完成用户身份识别');
+                    return;
+                }
+                
+                const result = await api.getUserStatus();
+                
+                const html = `
+                    <h6>📊 用户统计信息</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>👤 基本信息</h6>
+                            <ul class="list-unstyled">
+                                <li><strong>用户名:</strong> ${result.user_info.username}</li>
+                                <li><strong>用户ID:</strong> ${result.user_info.user_id}</li>
+                                <li><strong>类型:</strong> ${result.user_info.is_guest ? '访客' : '注册用户'}</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>📈 使用统计</h6>
+                            <ul class="list-unstyled">
+                                <li><strong>数据库:</strong> ${result.user_stats.has_database ? '已创建' : '未创建'}</li>
+                                <li><strong>数据库大小:</strong> ${(result.user_stats.database_size / 1024).toFixed(1)}KB</li>
+                                <li><strong>记忆大小:</strong> ${(result.user_stats.memory_size / 1024).toFixed(1)}KB</li>
+                                <li><strong>报告数量:</strong> ${result.user_stats.reports_count}个</li>
+                                <li><strong>总占用:</strong> ${(result.user_stats.total_size / 1024).toFixed(1)}KB</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                
+                showInfoModal('用户统计', html);
+                
+            } catch (error) {
+                showErrorMessage('获取用户统计失败: ' + error.message);
+            }
+        }
+
+        // 工具函数
+        function showSuccessMessage(message) {
+            showToast(message, 'success');
+        }
+
+        function showErrorMessage(message) {
+            showToast(message, 'error');
+        }
+
+        function showComingSoon(feature) {
+            showToast(`${feature}功能正在开发中，敬请期待！`, 'info');
+        }
+
+        function showInfoModal(title, content) {
+            const modal = document.createElement('div');
+            modal.className = 'modal fade';
+            modal.innerHTML = `
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            ${content}
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            const bsModal = new bootstrap.Modal(modal);
+            bsModal.show();
+            
+            modal.addEventListener('hidden.bs.modal', () => {
+                document.body.removeChild(modal);
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            let toastContainer = document.getElementById('toast-container');
+            if (!toastContainer) {
+                toastContainer = document.createElement('div');
+                toastContainer.id = 'toast-container';
+                toastContainer.className = 'toast-container position-fixed bottom-0 end-0 p-3';
+                toastContainer.style.zIndex = '9999';
+                document.body.appendChild(toastContainer);
+            }
+            
+            const toast = document.createElement('div');
+            toast.className = `toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0`;
+            toast.innerHTML = `
+                <div class="d-flex">
+                    <div class="toast-body">
+                        <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                        ${message}
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+                </div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            const bsToast = new bootstrap.Toast(toast);
+            bsToast.show();
+            
+            toast.addEventListener('hidden.bs.toast', () => {
+                toastContainer.removeChild(toast);
+            });
+        }
+
+        // 页面初始化
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('🤖 智能数据库分析系统正在初始化 (多用户版)...');
+            
+            // 立即检查后端连接状态
+            try {
+                const healthResponse = await api.healthCheck();
+                if (healthResponse && healthResponse.status === 'healthy') {
+                    console.log('✅ 后端健康检查成功:', healthResponse);
+                    currentState.backendConnected = true;
+                    document.getElementById('connection-status').textContent = '已连接';
+                    document.getElementById('connection-status').className = 'connection-indicator connected';
+                } else {
+                    throw new Error('健康检查失败');
+                }
+            } catch (error) {
+                console.error('❌ 后端连接失败:', error);
+                currentState.backendConnected = false;
+                document.getElementById('connection-status').textContent = '连接失败';
+                document.getElementById('connection-status').className = 'connection-indicator';
+                addMessage('❌ 后端服务连接失败，请检查服务是否启动', 'system');
+            }
+            
+            // 等待用户管理器初始化完成
+            userManager.addUserChangeListener(async (user) => {
+                if (user) {
+                    console.log('✅ 用户已登录:', user);
+                    
+                    // 用户登录后检查系统状态
+                    setTimeout(async () => {
+                        try {
+                            const status = await checkSystemStatus();
+                            if (status && status.system_ready) {
+                                addMessage(`✅ 欢迎 ${user.username}！系统初始化完成，支持实时流式分析。`, 'system');
+                                
+                                if (status.database_connected) {
+                                    addMessage('📊 检测到您的专属数据库，可以直接进行分析。', 'system');
+                                } else {
+                                    addMessage('💡 请先上传CSV文件创建您的专属数据库。', 'system');
+                                }
+                            } else {
+                                addMessage('❌ 后端服务连接失败，请检查服务是否启动', 'system');
+                            }
+                        } catch (error) {
+                            addMessage('❌ 系统初始化失败: ' + error.message, 'system');
+                        }
+                    }, 1000);
+                }
+            });
+            
+            // 初始消息
+            addMessage('🔄 正在进行用户身份识别...', 'system');
+        });
+
+        // 定期状态检查
+        setInterval(async () => {
+            if (userManager.isLoggedIn()) {
+                try {
+                    await api.healthCheck();
+                    if (!currentState.backendConnected) {
+                        currentState.backendConnected = true;
+                        document.getElementById('connection-status').textContent = '已连接';
+                        document.getElementById('connection-status').className = 'connection-indicator connected';
+                        addMessage('✅ 后端服务连接已恢复', 'system');
+                    }
+                } catch (error) {
+                    if (currentState.backendConnected) {
+                        currentState.backendConnected = false;
+                        document.getElementById('connection-status').textContent = '连接中断';
+                        document.getElementById('connection-status').className = 'connection-indicator';
+                        addMessage('⚠️ 后端服务连接中断', 'system');
+                    }
+                }
+            }
+        }, 30000); // 每30秒检查一次
+
+        // 调试脚本 - 测试后端连接
+        console.log('🔍 开始API连接测试...');
+        
+        async function testBackendConnection() {
+            // 尝试多个可能的端点
+            const endpoints = [
+                'http://localhost:5000/health',
+                'http://localhost:5000/api/health',
+                'http://127.0.0.1:5000/health',
+                '/health',
+                '/api/health'
+            ];
+            
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`尝试连接: ${endpoint}`);
+                    const response = await fetch(endpoint, {
+                        method: 'GET',
+                        headers: { 'Accept': 'application/json' },
+                        mode: 'cors',
+                        cache: 'no-cache'
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log(`✅ 连接成功 (${endpoint}):`, data);
+                        return {success: true, endpoint, data};
+                    } else {
+                        console.log(`❌ 连接失败 (${endpoint}): ${response.status} ${response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error(`❌ 连接错误 (${endpoint}):`, error.message);
+                }
+            }
+            
+            // 所有尝试都失败
+            return {success: false, message: '所有连接尝试均失败'};
+        }
+        
+        // 页面加载后执行测试
+        setTimeout(() => {
+            testBackendConnection().then(result => {
+                console.log('API连接测试结果:', result);
+                if (result.success) {
+                    // 如果测试成功，尝试手动初始化API
+                    if (window.api) {
+                        window.api.baseURL = result.endpoint.replace('/health', '');
+                        console.log('✅ 已更新API基础URL:', window.api.baseURL);
+                    }
+                } else {
+                    // 添加一个系统消息
+                    if (typeof addMessage === 'function') {
+                        addMessage('⚠️ 无法连接到后端服务，请确保服务器已启动', 'system');
+                    }
+                }
+            });
+        }, 2000);
+    </script>
+</body>
+</html>
