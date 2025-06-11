@@ -1,501 +1,547 @@
-// api.js - 修复版多用户支持的前端API类
+// P1精简版 api.js - 修复流式输出处理 + 对话记录功能
+// 版本: 3.3.0 - 支持对话记录和HTML报告
+
 class DatabaseAnalyzerAPI {
     constructor(baseURL = 'http://localhost:5000/api') {
         this.baseURL = baseURL;
-        this.debug = true; // 启用调试模式
+        this.debug = false;
         
-        // 自动检测API服务器地址
-        this.detectAPIServer();
+        // 确保用户ID一致性
+        this.ensureUserConsistency();
+        
+        // 初始化
+        this.init();
     }
     
-    // 自动检测API服务器地址
-    async detectAPIServer() {
-        // 尝试的服务器列表
-        const servers = [
-            'http://localhost:5000/api',  // 本地开发服务器
-            '/api',                       // 相对路径（当前域）
-            window.location.origin + '/api', // 当前域的绝对路径
-            'http://127.0.0.1:5000/api'   // 使用IP地址
-        ];
+    // 确保用户身份一致性
+    ensureUserConsistency() {
+        let userId = localStorage.getItem('simple_user_id');
+        let username = localStorage.getItem('simple_username');
         
-        this.log('正在自动检测API服务器地址...');
-        
-        for (const server of servers) {
-            try {
-                const response = await fetch(`${server}/health`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' },
-                    mode: 'cors',
-                    cache: 'no-cache',
-                    timeout: 2000
-                });
-                
-                if (response.ok) {
-                    this.baseURL = server;
-                    this.log(`✅ 已连接到API服务器: ${server}`);
-                    return;
-                }
-            } catch (error) {
-                this.log(`尝试连接到 ${server} 失败: ${error.message}`, 'warn');
-            }
-        }
-        
-        this.log('⚠️ 无法自动检测API服务器，使用默认地址', 'warn');
-    }
-    
-    log(message, type = 'info') {
-        if (this.debug) {
-            console.log(`[API ${type.toUpperCase()}]`, message);
-        }
-    }
-    
-    // 获取当前用户信息的请求头
-    getUserHeaders() {
-        const user = window.userManager ? window.userManager.getCurrentUser() : null;
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        
-        if (user) {
-            headers['X-User-ID'] = user.userId;
+        if (!userId) {
+            userId = 'user_' + Math.random().toString(36).substr(2, 8);
+            username = `User_${userId.slice(-4)}`;
             
-            // 修复: 对用户名进行URL编码以避免非ASCII字符问题
-            try {
-                headers['X-Username'] = encodeURIComponent(user.username);
-                this.log(`用户信息: ${user.username} (${user.userId}) - 已编码用户名`);
-            } catch (error) {
-                // 如果编码失败，使用安全的默认值
-                headers['X-Username'] = 'DefaultUser';
-                this.log(`用户名编码失败，使用默认值: ${error.message}`, 'warn');
-            }
-        } else {
-            this.log('未找到用户信息', 'warn');
+            localStorage.setItem('simple_user_id', userId);
+            localStorage.setItem('simple_username', username);
         }
         
-        return headers;
+        this.currentUserId = userId;
+        this.currentUsername = username;
+        
+        console.log(`🔑 用户身份确认: ${username} (${userId})`);
     }
     
-    // 通用请求方法 - 增强错误处理
-    async request(endpoint, options = {}) {
-        const url = `${this.baseURL}${endpoint}`;
-        const config = {
-            headers: {
-                ...this.getUserHeaders(),
-                ...options.headers
-            },
-            ...options
-        };
-        
-        this.log(`发起请求: ${config.method || 'GET'} ${url}`);
-        
+    async init() {
         try {
-            const response = await fetch(url, config);
-            this.log(`响应状态: ${response.status} ${response.statusText}`);
-            
-            // 处理401未授权错误
-            if (response.status === 401) {
-                const errorMsg = '用户身份验证失败，请重新登录';
-                this.log(errorMsg, 'error');
-                if (window.userManager) {
-                    window.userManager.logout();
-                }
-                throw new Error(errorMsg);
-            }
-            
-            // 检查响应类型
-            const contentType = response.headers.get('content-type');
-            let data;
-            
-            if (contentType && contentType.includes('application/json')) {
-                data = await response.json();
-            } else {
-                const text = await response.text();
-                this.log(`非JSON响应: ${text.substring(0, 200)}...`, 'warn');
-                throw new Error(`服务器返回非JSON响应: ${response.status}`);
-            }
-            
-            if (!response.ok) {
-                const errorMsg = data.message || `HTTP ${response.status}`;
-                this.log(`请求失败: ${errorMsg}`, 'error');
-                throw new Error(errorMsg);
-            }
-            
-            this.log('请求成功');
-            return data;
-            
-        } catch (error) {
-            if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                // 网络连接错误
-                const networkError = '无法连接到后端服务，请检查服务是否启动';
-                this.log(networkError, 'error');
-                throw new Error(networkError);
-            }
-            
-            this.log(`请求异常: ${error.message}`, 'error');
-            throw error;
-        }
-    }
-    
-    // 健康检查 - 最基本的连接测试
-    async healthCheck() {
-        try {
-            // 尝试使用标准请求
             const response = await fetch(`${this.baseURL}/health`, {
                 method: 'GET',
                 headers: { 'Accept': 'application/json' },
-                mode: 'cors',
-                cache: 'no-cache'
+                timeout: 3000
             });
             
             if (response.ok) {
                 const data = await response.json();
-                this.log('健康检查成功', 'success');
+                console.log('✅ API服务器连接成功');
+                console.log(`📊 服务版本: ${data.version}`);
+                if (data.features) {
+                    console.log(`🚀 支持功能: ${data.features.join(', ')}`);
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ API服务器连接失败，使用默认配置');
+        }
+    }
+    
+    log(message, type = 'info') {
+        if (this.debug) {
+            console.log(`[API-${type.toUpperCase()}]`, message);
+        }
+    }
+    
+    getUserHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'X-User-ID': this.currentUserId,
+            'X-Username': encodeURIComponent(this.currentUsername)
+        };
+    }
+    
+    getSimpleUserId() {
+        return this.currentUserId;
+    }
+    
+    getSimpleUsername() {
+        return this.currentUsername;
+    }
+    
+    // 核心请求方法
+    async request(endpoint, options = {}) {
+        const url = `${this.baseURL}${endpoint}`;
+        const config = {
+            headers: this.getUserHeaders(),
+            ...options
+        };
+        
+        if (options.headers) {
+            config.headers = { ...config.headers, ...options.headers };
+        }
+        
+        config.headers['X-User-ID'] = this.currentUserId;
+        config.headers['X-Username'] = encodeURIComponent(this.currentUsername);
+        
+        try {
+            const response = await fetch(url, config);
+            
+            if (options.expectStream) {
+                return response;
+            }
+            
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            
+            return data;
+        } catch (error) {
+            this.log(`请求失败: ${endpoint} - ${error.message}`, 'error');
+            throw error;
+        }
+    }
+    
+    async getStatus() {
+        return await this.request('/status');
+    }
+    
+    async uploadCSV(file, tableName = 'data_table') {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('tableName', tableName);
+        formData.append('userId', this.currentUserId);
+        formData.append('username', this.currentUsername);
+        
+        return await this.request('/upload', {
+            method: 'POST',
+            headers: {
+                'X-User-ID': this.currentUserId,
+                'X-Username': encodeURIComponent(this.currentUsername)
+            },
+            body: formData
+        });
+    }
+    
+    // 🔥 修复后的流式分析 - 正确处理Server-Sent Events
+    async analyzeStream(query, onMessage, onComplete, onError) {
+        try {
+            const response = await fetch(`${this.baseURL}/analyze-stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'X-User-ID': this.currentUserId,
+                    'X-Username': encodeURIComponent(this.currentUsername)
+                },
+                body: JSON.stringify({ 
+                    query,
+                    userId: this.currentUserId,
+                    username: this.currentUsername
+                })
+            });
+            
+            if (!response.ok) {
+                try {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || `HTTP ${response.status}`);
+                } catch (parseError) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            }
+            
+            // 🔥 创建流式读取器
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
+            
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) {
+                        console.log('📡 流式数据传输完成');
+                        if (onComplete) onComplete();
+                        break;
+                    }
+                    
+                    // 解码数据块
+                    buffer += decoder.decode(value, { stream: true });
+                    
+                    // 按行处理数据
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || ''; // 保留最后一个不完整的行
+                    
+                    for (const line of lines) {
+                        const trimmedLine = line.trim();
+                        
+                        if (trimmedLine === '') {
+                            continue; // 跳过空行
+                        }
+                        
+                        // 处理SSE数据格式
+                        if (trimmedLine.startsWith('data: ')) {
+                            try {
+                                const jsonStr = trimmedLine.slice(6); // 移除 'data: '
+                                
+                                if (jsonStr === '[DONE]') {
+                                    console.log('📡 收到完成信号');
+                                    if (onComplete) onComplete();
+                                    break;
+                                }
+                                
+                                const data = JSON.parse(jsonStr);
+                                
+                                // 根据消息类型处理
+                                if (data.type === 'status') {
+                                    console.log(`📊 状态: ${data.message}`);
+                                    if (onMessage) {
+                                        onMessage({
+                                            type: 'status',
+                                            content: data.message
+                                        });
+                                    }
+                                } else if (data.type === 'ai_response') {
+                                    // 实时AI响应
+                                    if (onMessage) {
+                                        onMessage({
+                                            type: 'ai_response',
+                                            content: data.content
+                                        });
+                                    }
+                                } else if (data.type === 'tool_result') {
+                                    // 工具执行结果
+                                    console.log(`🔧 工具结果: ${data.tool}`);
+                                    if (onMessage) {
+                                        onMessage({
+                                            type: 'tool_result',
+                                            tool: data.tool,
+                                            content: data.result
+                                        });
+                                    }
+                                } else if (data.type === 'final_html') {
+                                    // 🆕 最终HTML报告
+                                    console.log('📊 收到最终HTML报告');
+                                    if (onMessage) {
+                                        onMessage({
+                                            type: 'final_html',
+                                            content: data.content
+                                        });
+                                    }
+                                } else if (data.type === 'error') {
+                                    console.error(`❌ 错误: ${data.message}`);
+                                    if (onError) {
+                                        onError(new Error(data.message));
+                                    }
+                                    return;
+                                }
+                                
+                            } catch (parseError) {
+                                console.warn('⚠️ 解析SSE数据失败:', trimmedLine, parseError);
+                                // 继续处理其他行，不中断流
+                            }
+                        }
+                    }
+                }
+            } finally {
+                reader.releaseLock();
+            }
+            
+        } catch (error) {
+            console.error('❌ 流式分析失败:', error);
+            if (onError) {
+                onError(error);
+            }
+            throw error;
+        }
+    }
+    
+    // 🆕 获取对话历史
+    async getConversations(limit = 10, offset = 0) {
+        return await this.request(`/conversations?limit=${limit}&offset=${offset}`);
+    }
+    
+    // 🆕 获取特定对话详情
+    async getConversationDetail(conversationId) {
+        return await this.request(`/conversations/${conversationId}`);
+    }
+    
+    // 🆕 获取最新HTML报告
+    async getLatestReport() {
+        return await this.request('/latest-report');
+    }
+    
+    // 健康检查
+    async healthCheck() {
+        try {
+            const response = await fetch(`${this.baseURL}/health`, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                timeout: 5000
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.log('健康检查成功');
                 return data;
             } else {
                 throw new Error(`健康检查失败: HTTP ${response.status}`);
             }
         } catch (error) {
-            // 如果标准请求失败，尝试使用动态脚本加载方式（类似JSONP）绕过跨域限制
-            this.log('标准健康检查失败，尝试备用方法', 'warn');
-            return new Promise((resolve, reject) => {
-                // 创建一个全局回调函数
-                const callbackName = 'healthCheckCallback_' + Math.floor(Math.random() * 1000000);
-                window[callbackName] = (data) => {
-                    // 清理
-                    delete window[callbackName];
-                    document.body.removeChild(script);
-                    resolve(data);
-                };
-                
-                // 创建脚本标签
-                const script = document.createElement('script');
-                script.src = `${this.baseURL}/health?callback=${callbackName}`;
-                script.onerror = () => {
-                    // 清理
-                    delete window[callbackName];
-                    document.body.removeChild(script);
-                    reject(new Error('健康检查失败，无法连接到后端服务'));
-                };
-                
-                // 添加到文档
-                document.body.appendChild(script);
-                
-                // 设置超时
-                setTimeout(() => {
-                    if (window[callbackName]) {
-                        delete window[callbackName];
-                        document.body.removeChild(script);
-                        reject(new Error('健康检查超时'));
-                    }
-                }, 5000);
-            });
-        }
-    }
-    
-    // 修复：正确的状态检查方法名
-    async getStatus() {
-        return await this.request('/status');
-    }
-    
-    // 保持向后兼容
-    async getSystemStatus() {
-        this.log('getSystemStatus() 已废弃，请使用 getStatus()', 'warn');
-        return await this.getStatus();
-    }
-    
-    // 用户相关接口
-    async getUserStatus() {
-        return await this.request('/user/status');
-    }
-    
-    // 上传CSV文件 - 增强错误处理
-    async uploadCSV(file, tableName, dbPath) {
-        const user = window.userManager ? window.userManager.getCurrentUser() : null;
-        
-        if (!user) {
-            throw new Error('请先完成用户身份识别');
-        }
-        
-        this.log(`准备上传文件: ${file.name} (${file.size} bytes)`);
-        
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('tableName', tableName || 'data_table');
-        formData.append('dbPath', dbPath || 'analysis.db');
-        
-        // 添加用户信息到表单数据
-        formData.append('userId', user.userId);
-        formData.append('username', user.username);
-        
-        // 修复: 确保headers不包含非ASCII字符
-        const headers = {};
-        headers['X-User-ID'] = user.userId;
-        
-        // 修复: 对用户名进行URL编码以避免非ASCII字符问题
-        try {
-            headers['X-Username'] = encodeURIComponent(user.username);
-            this.log(`上传用户信息: ${user.username} (${user.userId}) - 已编码用户名`);
-        } catch (error) {
-            // 如果编码失败，使用安全的默认值
-            headers['X-Username'] = 'DefaultUser';
-            this.log(`用户名编码失败，使用默认值: ${error.message}`, 'warn');
-        }
-        
-        // 使用直接的fetch调用，而不是通过request方法，以便更好地控制
-        try {
-            const uploadUrl = `${this.baseURL}/upload`;
-            this.log(`开始上传到: ${uploadUrl}`);
-            
-            // 使用更长的超时时间
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000); // 120秒超时
-            
-            this.log(`请求配置: 方法=POST, URL=${uploadUrl}, 超时=120秒`);
-            this.log(`请求头: ${JSON.stringify(headers)}`);
-            
-            const response = await fetch(uploadUrl, {
-                method: 'POST',
-                headers: headers,
-                body: formData,
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            
-            this.log(`上传响应状态: ${response.status} ${response.statusText}`);
-            
-            // 检查响应类型
-            const contentType = response.headers.get('content-type');
-            this.log(`响应内容类型: ${contentType}`);
-            
-            let data;
-            
-            if (contentType && contentType.includes('application/json')) {
-                data = await response.json();
-                this.log(`上传响应数据: ${JSON.stringify(data).substring(0, 100)}...`);
-            } else {
-                const text = await response.text();
-                this.log(`非JSON响应: ${text.substring(0, 200)}...`, 'warn');
-                throw new Error(`服务器返回非JSON响应: ${response.status}`);
-            }
-            
-            if (!response.ok) {
-                const errorMsg = data.message || `HTTP ${response.status}`;
-                this.log(`上传失败: ${errorMsg}`, 'error');
-                throw new Error(errorMsg);
-            }
-            
-            this.log('上传成功');
-            return data;
-            
-        } catch (error) {
-            if (error.name === 'AbortError') {
-                this.log('上传请求超时', 'error');
-                throw new Error('上传请求超时，请检查网络连接和服务器状态');
-            } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                this.log(`无法连接到后端服务: ${error.message}`, 'error');
-                throw new Error(`无法连接到后端服务，请检查服务是否启动: ${error.message}`);
-            } else if (error.message && error.message.includes('headers')) {
-                this.log(`请求头错误: ${error.message}`, 'error');
-                throw new Error(`请求头错误，可能包含无效字符: ${error.message}`);
-            }
-            
-            this.log(`上传异常: ${error.message}`, 'error');
+            this.log(`健康检查失败: ${error.message}`, 'error');
             throw error;
         }
     }
     
-    /**
-     * 发送流式分析请求
-     * @param {string} query - 分析查询
-     * @returns {Promise<Response>} - 返回流式响应
-     */
-    async analyzeStream(query) {
-        const user = window.userManager ? window.userManager.getCurrentUser() : null;
-        
-        if (!user) {
-            throw new Error('用户未登录，请先登录');
-        }
-        
-        this.log(`发送流式分析请求: ${query}`);
-        this.log(`当前用户: ${user.username} (ID: ${user.userId})`);
-        
-        try {
-            // 构建请求体
-            const requestBody = {
-                query: query.trim(),
-                user_id: user.userId,
-                username: user.username
-            };
-            
-            // 构建请求头
-            const headers = this.getUserHeaders();
-            headers['Accept'] = 'text/event-stream';
-            headers['Cache-Control'] = 'no-cache';
-            
-            // 检测浏览器类型
-            const isEdge = navigator.userAgent.indexOf('Edg/') !== -1;
-            if (isEdge) {
-                this.log('检测到Edge浏览器，使用兼容模式', 'info');
-            }
-            
-            // 发送请求
-            const response = await fetch(`${this.baseURL}/analyze-stream`, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify(requestBody),
-                credentials: 'same-origin'
-            });
-            
-            if (!response.ok) {
-                let errorMessage = `服务器错误 (${response.status})`;
-                try {
-                    // 尝试获取错误信息
-                    const errorText = await response.text();
-                    if (errorText) {
-                        try {
-                            const errorJson = JSON.parse(errorText);
-                            errorMessage = errorJson.message || errorText;
-                        } catch {
-                            errorMessage = errorText;
-                        }
-                    }
-                } catch (e) {
-                    this.log(`无法解析错误响应: ${e.message}`, 'error');
-                }
-                
-                this.log(`流式分析请求失败: ${response.status} - ${errorMessage}`, 'error');
-                throw new Error(errorMessage);
-            }
-            
-            // 检查响应类型
-            const contentType = response.headers.get('content-type');
-            this.log(`收到响应，内容类型: ${contentType}`, 'info');
-            
-            return response;
-        } catch (error) {
-            this.log(`流式分析请求异常: ${error.message}`, 'error');
-            throw error;
-        }
-    }
-    
-    // 传统分析方法
-    async analyze(query) {
-        const user = window.userManager ? window.userManager.getCurrentUser() : null;
-        
-        if (!user) {
-            throw new Error('请先完成用户身份识别');
-        }
-        
-        const requestBody = { 
-            query: query.trim(),
-            userId: user.userId,
-            username: user.username
-        };
-        
-        // 修复: 确保headers不包含非ASCII字符
-        const headers = {
-            'Content-Type': 'application/json'
-        };
-        headers['X-User-ID'] = user.userId;
-        
-        // 修复: 对用户名进行URL编码以避免非ASCII字符问题
-        try {
-            headers['X-Username'] = encodeURIComponent(user.username);
-            this.log(`分析用户信息: ${user.username} (${user.userId}) - 已编码用户名`);
-        } catch (error) {
-            // 如果编码失败，使用安全的默认值
-            headers['X-Username'] = 'DefaultUser';
-            this.log(`用户名编码失败，使用默认值: ${error.message}`, 'warn');
-        }
-        
-        return await this.request('/analyze', {
-            method: 'POST',
-            headers: headers,
-            body: JSON.stringify(requestBody)
-        });
-    }
-    
-    // 获取所有用户列表（调试用）
-    async getAllUsers() {
-        return await this.request('/users');
-    }
-    
-    // 连接测试方法
     async testConnection() {
         this.log('开始连接测试...');
         
         try {
-            // 1. 基础健康检查
             const health = await this.healthCheck();
-            this.log(`健康检查通过: ${health.status}`);
+            this.log(`连接测试成功: ${health.status}`);
             
-            // 2. 状态检查（需要用户信息）
-            if (window.userManager && window.userManager.isLoggedIn()) {
-                const status = await this.getStatus();
-                this.log(`状态检查通过: 系统${status.system_ready ? '就绪' : '未就绪'}`);
-                return { success: true, health, status };
-            } else {
-                this.log('用户未登录，跳过状态检查');
-                return { success: true, health, status: null };
-            }
+            return { 
+                success: true, 
+                health,
+                message: '连接正常'
+            };
             
         } catch (error) {
             this.log(`连接测试失败: ${error.message}`, 'error');
+            return { 
+                success: false, 
+                error: error.message,
+                message: '连接失败'
+            };
+        }
+    }
+    
+    // 🆕 高级功能：批量操作
+    async batchOperation(operations) {
+        const results = [];
+        
+        for (const operation of operations) {
+            try {
+                let result;
+                switch (operation.type) {
+                    case 'getStatus':
+                        result = await this.getStatus();
+                        break;
+                    case 'getConversations':
+                        result = await this.getConversations(operation.limit, operation.offset);
+                        break;
+                    case 'getLatestReport':
+                        result = await this.getLatestReport();
+                        break;
+                    default:
+                        throw new Error(`未知操作类型: ${operation.type}`);
+                }
+                
+                results.push({
+                    operation: operation.type,
+                    success: true,
+                    data: result
+                });
+                
+            } catch (error) {
+                results.push({
+                    operation: operation.type,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+        
+        return results;
+    }
+    
+    // 🆕 数据导出功能
+    exportConversations(conversations, format = 'json') {
+        try {
+            let exportData;
+            let mimeType;
+            let fileName;
+            
+            const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+            
+            switch (format.toLowerCase()) {
+                case 'json':
+                    exportData = JSON.stringify(conversations, null, 2);
+                    mimeType = 'application/json';
+                    fileName = `conversations_${timestamp}.json`;
+                    break;
+                    
+                case 'csv':
+                    // 简化的CSV导出
+                    const headers = ['对话ID', '开始时间', '用户查询', '状态', '工具调用次数'];
+                    const rows = conversations.map(conv => [
+                        conv.conversation_id,
+                        conv.start_time,
+                        `"${conv.user_query.replace(/"/g, '""')}"`,
+                        conv.status,
+                        conv.tool_calls_count || 0
+                    ]);
+                    
+                    exportData = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+                    mimeType = 'text/csv;charset=utf-8';
+                    fileName = `conversations_${timestamp}.csv`;
+                    break;
+                    
+                default:
+                    throw new Error(`不支持的导出格式: ${format}`);
+            }
+            
+            // 创建下载
+            const blob = new Blob([exportData], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            console.log(`✅ 导出成功: ${fileName}`);
+            return { success: true, fileName };
+            
+        } catch (error) {
+            console.error('❌ 导出失败:', error);
             return { success: false, error: error.message };
         }
     }
     
-    // 以下接口暂时保持原样，后续实现
-    async getMemory(conversationId = null, limit = 10) {
-        throw new Error('记忆接口正在开发中...');
+    // 🆕 缓存管理
+    enableCache(ttl = 60000) { // 默认缓存1分钟
+        this.cache = new Map();
+        this.cacheTTL = ttl;
+        
+        // 清理过期缓存
+        setInterval(() => {
+            const now = Date.now();
+            for (const [key, value] of this.cache.entries()) {
+                if (now - value.timestamp > this.cacheTTL) {
+                    this.cache.delete(key);
+                }
+            }
+        }, this.cacheTTL);
+        
+        console.log('✅ 缓存已启用');
     }
     
-    async getSQLHistory(conversationId) {
-        throw new Error('SQL历史接口正在开发中...');
+    _getCacheKey(endpoint, options) {
+        return `${endpoint}_${JSON.stringify(options || {})}`;
     }
     
-    async exportReport(conversationId) {
-        throw new Error('报告导出接口正在开发中...');
+    _getFromCache(key) {
+        if (!this.cache) return null;
+        
+        const cached = this.cache.get(key);
+        if (cached && Date.now() - cached.timestamp < this.cacheTTL) {
+            return cached.data;
+        }
+        
+        return null;
     }
     
-    async clearMemory() {
-        throw new Error('记忆清空接口正在开发中...');
-    }
-    
-    async executeQuery(sql) {
-        throw new Error('SQL查询接口正在开发中...');
-    }
-    
-    async getTableInfo() {
-        throw new Error('表信息接口正在开发中...');
-    }
-    
-    async getReports() {
-        throw new Error('报告列表接口正在开发中...');
+    _setCache(key, data) {
+        if (!this.cache) return;
+        
+        this.cache.set(key, {
+            data,
+            timestamp: Date.now()
+        });
     }
 }
 
 // 创建API实例
 const api = new DatabaseAnalyzerAPI();
 
-// 导出API实例供其他脚本使用
+// 🆕 启用缓存（可选）
+// api.enableCache(30000); // 30秒缓存
+
+// 导出API实例
 window.databaseAPI = api;
 
-// 页面加载后自动测试连接
+// 🆕 全局工具函数
+window.apiUtils = {
+    // 格式化文件大小
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    },
+    
+    // 格式化时间
+    formatTime(isoString) {
+        try {
+            return new Date(isoString).toLocaleString('zh-CN');
+        } catch (error) {
+            return isoString;
+        }
+    },
+    
+    // 复制到剪贴板
+    async copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (error) {
+            console.error('复制失败:', error);
+            return false;
+        }
+    },
+    
+    // 验证文件类型
+    validateFileType(file, allowedTypes = ['.csv']) {
+        const fileName = file.name.toLowerCase();
+        return allowedTypes.some(type => fileName.endsWith(type));
+    }
+};
+
+// 页面加载处理
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('🔍 开始后端连接测试...');
+    console.log('🔍 开始API连接测试...');
+    console.log(`👤 当前用户: ${api.currentUsername} (${api.currentUserId})`);
+    
+    // 添加全局错误处理
+    window.addEventListener('unhandledrejection', event => {
+        console.error('未处理的Promise拒绝:', event.reason);
+        // 可以在这里添加用户友好的错误提示
+    });
     
     setTimeout(async () => {
         try {
             const result = await api.testConnection();
             if (result.success) {
-                console.log('✅ 后端连接测试成功');
+                console.log('✅ API连接测试成功');
+                
+                // 🆕 执行初始化数据加载
+                try {
+                    // 预加载系统状态
+                    const status = await api.getStatus();
+                    console.log('📊 系统状态预加载完成');
+                    
+                    // 可以在这里添加更多的初始化操作
+                } catch (initError) {
+                    console.warn('⚠️ 初始化数据加载失败:', initError.message);
+                }
             } else {
-                console.error('❌ 后端连接测试失败:', result.error);
+                console.warn('⚠️ API连接测试失败:', result.message);
             }
         } catch (error) {
-            console.error('❌ 连接测试异常:', error);
+            console.error('❌ API连接测试异常:', error);
         }
     }, 1000);
 });

@@ -1,4 +1,4 @@
-# user_middleware.py - 用户管理中间件（修复编码问题）
+# user_middleware.py - 清理调试输出版本
 from pathlib import Path
 import json
 import os
@@ -7,119 +7,114 @@ from functools import wraps
 from flask import request, jsonify
 import hashlib
 import time
+import urllib.parse
 
 class UserManager:
-    """用户管理器 - 负责用户识别和文件路径管理"""
+    """精简版用户管理器 - 清理调试输出"""
     
     def __init__(self, base_data_dir="data"):
         self.base_data_dir = Path(base_data_dir)
         self.base_data_dir.mkdir(exist_ok=True)
-        
-        # 创建共享目录
-        (self.base_data_dir / "shared" / "uploads").mkdir(parents=True, exist_ok=True)
-        
-        print(f"✅ 用户管理器初始化完成，数据目录: {self.base_data_dir.absolute()}")
+        print(f"✅ 用户管理器初始化完成")
     
     def get_user_from_request(self, request):
         """从请求中提取用户信息"""
-        # 策略1: 从请求头获取（推荐方式）
+        user_id = None
+        username = None
+        
+        # 策略1: 从请求头获取（优先级最高）
         user_id = request.headers.get('X-User-ID')
         username = request.headers.get('X-Username')
         
-        # 处理URL编码的用户名
+        # URL解码用户名
         if username:
             try:
-                import urllib.parse
-                # 检查是否是URL编码的字符串
                 if '%' in username:
                     username = urllib.parse.unquote(username)
-                    print(f"✅ 已解码用户名: {username}")
-            except Exception as e:
-                print(f"⚠️ 解码用户名失败: {e}")
+                username = self._safe_username(username)
+            except:
+                username = None
         
-        # 策略2: 从URL参数获取（GET请求）
+        # 策略2: 从URL参数获取
         if not user_id:
             user_id = request.args.get('userId')
-            username = request.args.get('username', '')
+            if not username:
+                username = request.args.get('username', '')
         
-        # 策略3: 从请求体获取（POST请求）
-        if not user_id and request.is_json:
+        # 策略3: 从请求体获取（用于JSON和FormData）
+        if not user_id:
             try:
-                json_data = request.get_json()
-                if json_data:
-                    user_id = json_data.get('userId')
-                    username = json_data.get('username', '')
+                # 检查JSON数据
+                if request.is_json:
+                    json_data = request.get_json()
+                    if json_data:
+                        user_id = json_data.get('userId')
+                        if not username:
+                            username = json_data.get('username', '')
+                
+                # 检查表单数据（用于文件上传）
+                elif request.form:
+                    user_id = request.form.get('userId')
+                    if not username:
+                        username = request.form.get('username', '')
             except:
                 pass
         
-        # 策略4: 从表单数据获取（文件上传）
-        if not user_id and request.form:
-            user_id = request.form.get('userId')
-            username = request.form.get('username', '')
-        
-        # 如果都没有，生成临时用户ID
+        # 策略4: 生成一致的访客ID（基于IP和User-Agent）
         if not user_id:
-            # 基于IP和UserAgent生成相对稳定的临时ID
             ip = request.remote_addr or 'unknown'
             user_agent = request.headers.get('User-Agent', 'unknown')
             
-            # 🔥 修复编码问题：确保所有字符串都使用UTF-8编码
-            temp_seed = f"{ip}_{user_agent}_{int(time.time() / 3600)}"
-            # 使用UTF-8编码进行哈希
-            user_id = f"guest_{hashlib.md5(temp_seed.encode('utf-8')).hexdigest()[:8]}"
-            # 使用英文避免编码问题
-            username = username or f"Guest_{user_id[-4:]}"
+            # 创建一个相对稳定的访客ID（在同一小时内保持一致）
+            hour_seed = int(time.time() / 3600)  # 每小时变化
+            temp_seed = f"{ip}_{user_agent}_{hour_seed}"
+            guest_hash = hashlib.md5(temp_seed.encode('utf-8')).hexdigest()[:8]
+            user_id = f"guest_{guest_hash}"
+            
+            if not username:
+                username = f"Guest_{guest_hash[-4:]}"
         
-        # 🔥 确保用户名使用安全字符
+        # 确保用户名安全
         if username:
-            # 清理用户名中可能导致编码问题的字符
-            username = self._clean_username(username)
+            username = self._safe_username(username)
+        else:
+            username = f"User_{str(user_id)[-4:]}"
         
-        return {
+        user_info = {
             'user_id': str(user_id),
-            'username': username or f"User_{user_id}",
+            'username': username,
             'is_guest': str(user_id).startswith('guest_')
         }
+        
+        return user_info
     
-    def _clean_username(self, username):
-        """清理用户名，避免编码问题"""
+    def _safe_username(self, username):
+        """安全的用户名处理"""
         if not username:
             return "Unknown"
         
-        # 替换常见的中文字符为英文
-        replacements = {
-            '用户': 'User',
-            '访客': 'Guest', 
-            '管理员': 'Admin',
-            '测试': 'Test',
-            '张三': 'Zhang',
-            '李四': 'Li',
-            '王五': 'Wang',
-            '数据分析师': 'Analyst',
-            '业务经理': 'Manager',
-            '产品经理': 'PM'
-        }
+        # 移除不安全字符
+        import re
+        safe_name = re.sub(r'[<>:"/\\|?*]', '_', str(username))
         
-        cleaned = str(username)
-        for chinese, english in replacements.items():
-            cleaned = cleaned.replace(chinese, english)
+        # 限制长度
+        safe_name = safe_name[:50]
         
-        # 如果仍有非ASCII字符，使用编码安全的方式处理
-        try:
-            # 尝试编码为latin-1，如果失败则使用ASCII安全版本
-            cleaned.encode('latin-1')
-            return cleaned
-        except UnicodeEncodeError:
-            # 转换为ASCII安全格式
-            safe_name = cleaned.encode('ascii', 'ignore').decode('ascii')
-            if not safe_name:
-                return f"User_{int(time.time()) % 10000}"
-            return safe_name
+        # 确保不为空
+        if not safe_name.strip():
+            return f"User_{int(time.time()) % 10000}"
+        
+        return safe_name.strip()
     
     def get_user_directory(self, user_id):
         """获取用户专属目录"""
-        # 确保用户ID是ASCII安全的
-        safe_user_id = str(user_id).encode('ascii', 'ignore').decode('ascii')
+        # 确保用户ID是文件系统安全的
+        safe_user_id = str(user_id)
+        
+        # 移除不安全字符
+        import re
+        safe_user_id = re.sub(r'[<>:"/\\|?*]', '_', safe_user_id)
+        
         if not safe_user_id:
             safe_user_id = f"user_{int(time.time()) % 10000}"
             
@@ -143,83 +138,6 @@ class UserManager:
             'reports_dir': user_dir / "reports",
             'uploads_dir': user_dir / "uploads"
         }
-    
-    def save_user_info(self, user_info):
-        """保存用户信息到文件"""
-        user_dir = self.get_user_directory(user_info['user_id'])
-        user_info_file = user_dir / "user_info.json"
-        
-        # 🔥 确保所有字符串字段都是编码安全的
-        safe_user_info = {}
-        for key, value in user_info.items():
-            if isinstance(value, str):
-                safe_user_info[key] = self._clean_username(value) if key == 'username' else value
-            else:
-                safe_user_info[key] = value
-        
-        user_data = {
-            **safe_user_info,
-            'last_activity': datetime.now().isoformat(),
-            'created_at': datetime.now().isoformat() if not user_info_file.exists() else None
-        }
-        
-        # 如果文件已存在，保留创建时间
-        if user_info_file.exists():
-            try:
-                with open(user_info_file, 'r', encoding='utf-8') as f:
-                    existing_data = json.load(f)
-                    user_data['created_at'] = existing_data.get('created_at', user_data['created_at'])
-            except Exception as e:
-                print(f"⚠️  读取现有用户文件失败: {e}")
-        
-        try:
-            with open(user_info_file, 'w', encoding='utf-8') as f:
-                json.dump(user_data, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"⚠️  保存用户信息失败: {e}")
-            # 使用ASCII安全模式保存
-            with open(user_info_file, 'w', encoding='utf-8') as f:
-                json.dump(user_data, f, ensure_ascii=True, indent=2)
-        
-        return user_data
-    
-    def get_user_stats(self, user_id):
-        """获取用户统计信息"""
-        try:
-            paths = self.get_user_paths(user_id)
-            
-            stats = {
-                'user_id': str(user_id),
-                'has_database': paths['db_path'].exists(),
-                'database_size': paths['db_path'].stat().st_size if paths['db_path'].exists() else 0,
-                'has_memory': paths['memory_path'].exists(),
-                'memory_size': paths['memory_path'].stat().st_size if paths['memory_path'].exists() else 0,
-                'reports_count': len(list(paths['reports_dir'].glob('*.html'))) if paths['reports_dir'].exists() else 0,
-                'total_size': 0
-            }
-            
-            # 计算总大小
-            if paths['user_dir'].exists():
-                try:
-                    for file_path in paths['user_dir'].rglob('*'):
-                        if file_path.is_file():
-                            stats['total_size'] += file_path.stat().st_size
-                except Exception as e:
-                    print(f"⚠️  计算用户目录大小失败: {e}")
-            
-            return stats
-            
-        except Exception as e:
-            print(f"⚠️  获取用户统计失败: {e}")
-            return {
-                'user_id': str(user_id),
-                'has_database': False,
-                'database_size': 0,
-                'has_memory': False,
-                'memory_size': 0,
-                'reports_count': 0,
-                'total_size': 0
-            }
 
 # 全局用户管理器实例
 user_manager = UserManager()
@@ -232,29 +150,20 @@ def require_user(f):
             # 获取用户信息
             user_info = user_manager.get_user_from_request(request)
             
-            # 保存用户信息
-            user_data = user_manager.save_user_info(user_info)
+            # 验证用户信息
+            if not user_info.get('user_id'):
+                return jsonify({
+                    "success": False, 
+                    "message": "用户身份识别失败"
+                }), 400
             
             # 将用户信息传递给路由函数
-            return f(user_data, *args, **kwargs)
-            
-        except UnicodeEncodeError as e:
-            print(f"⚠️  编码错误: {e}")
-            # 使用默认用户信息
-            default_user = {
-                'user_id': f"guest_{int(time.time()) % 10000}",
-                'username': 'DefaultUser',
-                'is_guest': True
-            }
-            user_data = user_manager.save_user_info(default_user)
-            return f(user_data, *args, **kwargs)
+            return f(user_info, *args, **kwargs)
             
         except Exception as e:
-            error_msg = f"用户身份识别失败: {str(e)}"
-            print(f"❌ {error_msg}")
             return jsonify({
                 "success": False, 
-                "message": error_msg
+                "message": f"用户身份识别失败: {str(e)}"
             }), 500
     
     return decorated_function
