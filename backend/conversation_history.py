@@ -204,9 +204,35 @@ class ConversationHistoryManager:
             return False
     
     def get_current_conversation_info(self) -> Optional[Dict[str, Any]]:
-        """获取当前对话信息"""
+        """获取当前对话信息，包含消息历史"""
         if self.current_conversation_id and self.current_conversation_id in self.conversations_meta['conversations']:
-            return self.conversations_meta['conversations'][self.current_conversation_id]
+            conv_info = self.conversations_meta['conversations'][self.current_conversation_id].copy()
+            
+            # 从数据库加载消息历史
+            try:
+                if hasattr(self, 'db_path') and self.db_path and Path(self.db_path).exists():
+                    with sqlite3.connect(self.db_path) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            SELECT messages FROM conversation_history 
+                            WHERE conversation_id = ?
+                        ''', (self.current_conversation_id,))
+                        result = cursor.fetchone()
+                        
+                        if result and result[0]:
+                            conv_info['messages'] = json.loads(result[0])
+                            logging.info(f"📚 已加载 {len(conv_info['messages'])} 条消息历史")
+                        else:
+                            conv_info['messages'] = []
+                            logging.info(f"📚 当前对话暂无消息历史")
+                else:
+                    conv_info['messages'] = []
+                    logging.warning(f"📚 数据库路径不存在，无法加载消息历史")
+            except Exception as e:
+                logging.error(f"❌ 加载消息历史失败: {e}")
+                conv_info['messages'] = []
+            
+            return conv_info
         return None
     
     def _init_conversation_database(self, db_path: Path):

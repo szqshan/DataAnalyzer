@@ -35,6 +35,26 @@ app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB最大文件大小
 user_analyzers = {}
 user_history_managers = {}
 
+def extract_query_from_data(data):
+    """安全地从请求数据中提取查询字符串"""
+    query_raw = data.get('query', '')
+    
+    if isinstance(query_raw, str):
+        return query_raw.strip()
+    elif isinstance(query_raw, list):
+        # 处理列表情况 - 合并所有非空文本
+        text_parts = []
+        for item in query_raw:
+            if isinstance(item, dict) and 'text' in item:
+                text_parts.append(str(item['text']))
+            elif isinstance(item, str) and item.strip():
+                text_parts.append(item.strip())
+        return ' '.join(text_parts).strip()
+    elif isinstance(query_raw, dict) and 'text' in query_raw:
+        return str(query_raw['text']).strip()
+    else:
+        return str(query_raw).strip()
+
 def get_user_analyzer(user_data):
     """获取或创建用户专属的分析器实例"""
     user_id = user_data['user_id']
@@ -200,8 +220,11 @@ def analyze_data_stream(user_data):
     """流式数据分析接口"""
     try:
         data = request.get_json()
-        query = data.get('query', '').strip()
+        query = extract_query_from_data(data)
         conversation_id = data.get('conversation_id')
+        
+        print(f"🔍 收到查询请求 - 原始数据类型: {type(data.get('query'))}, 处理后query: '{query}'")
+        
         if not query:
             return jsonify({"success": False, "message": "查询内容不能为空"}), 400
         
@@ -225,6 +248,15 @@ def analyze_data_stream(user_data):
                     # 切换到指定对话
                     history_manager.switch_conversation(conversation_id, user_data['user_id'])
                 current_conversation = history_manager.get_current_conversation_info()
+                
+                # 调试信息：打印当前对话状态
+                if current_conversation:
+                    messages_count = len(current_conversation.get('messages', []))
+                    print(f"📚 当前对话: {current_conversation['conversation_name']}")
+                    print(f"📚 已有消息数量: {messages_count}")
+                    if messages_count > 0:
+                        print(f"📚 最后一条消息角色: {current_conversation['messages'][-1].get('role', '未知')}")
+                
                 # 获取历史对话上下文（当前对话内的历史）
                 recent_conversations = history_manager.get_recent_conversations(user_data['user_id'], 3)
                 context_info = ""
@@ -256,6 +288,8 @@ def analyze_data_stream(user_data):
                     )
                 # 初始化消息历史
                 messages = current_conversation.get('messages', [])
+                print(f"📚 加载到 {len(messages)} 条历史消息")
+                
                 # 追加本轮用户消息
                 from datetime import datetime
                 user_content = query
@@ -263,7 +297,14 @@ def analyze_data_stream(user_data):
                     user_content_arr = [{"type": "text", "text": user_content}]
                 else:
                     user_content_arr = user_content
-                messages.append({"role": "user", "content": user_content_arr, "timestamp": datetime.now().isoformat()})
+                
+                new_user_message = {
+                    "role": "user", 
+                    "content": user_content_arr, 
+                    "timestamp": datetime.now().isoformat()
+                }
+                messages.append(new_user_message)
+                print(f"📚 添加新用户消息，当前总消息数: {len(messages)}")
                 max_iterations = 100
                 iteration = 0
                 while iteration < max_iterations:
