@@ -9,7 +9,10 @@ from datetime import datetime
 import json
 import re
 from typing import Dict, List, Optional, Any
-from .data_processor import DataProcessor
+try:
+    from .data_processor import DataProcessor
+except ImportError:
+    from data_processor import DataProcessor
 
 class DatabaseAnalyzer:
     """P1精简版数据库分析器类 - 专注核心数据处理功能，支持多表管理"""
