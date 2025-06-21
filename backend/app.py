@@ -410,6 +410,9 @@ def analyze_data_stream(user_data):
                                     "role": "user",
                                     "content": tool_results
                                 })
+                                # ✅ 工具结果添加后，重新保存完整的消息历史
+                                if current_conversation['conversation_id']:
+                                    history_manager.update_conversation_messages(current_conversation['conversation_id'], messages)
                             # 更新工具调用记录
                             if current_conversation['conversation_id'] and tool_calls:
                                 history_manager.update_tool_calls(current_conversation['conversation_id'], tool_calls)
