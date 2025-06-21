@@ -92,7 +92,7 @@
         <label>分析查询: 
             <textarea id="analysisQuery" rows="3" cols="80" placeholder="输入你的数据分析需求，例如：分析数据的基本统计信息并生成详细的HTML报告">给我个报告</textarea>
         </label><br><br>
-        <button onclick="startMultiTurnChat()" id="analyzeBtn">开始多轮对话（包含富文本）</button>
+        <button onclick="startAnalysis()" id="analyzeBtn">开始流式分析</button>
         <button onclick="stopAnalysis()" id="stopBtn" disabled>停止分析</button><br><br>
         
         <h3>流式响应日志:</h3>
@@ -119,16 +119,21 @@
             <div id="streamLog" style="border: 1px solid #ccc; height: 200px; overflow-y: auto; padding: 5px; font-family: monospace; background: #f5f5f5; font-size: 12px;"></div>
         </div>
         
-        <h3>多轮对话窗口（打字机效果）:</h3>
-        <div id="aiResponse" style="border: 1px solid #ccc; height: 400px; overflow-y: auto; padding: 10px; background: #fff;">
-            <div style="text-align: center; color: #666; padding: 40px;">
-                <p>📱 多轮对话模式</p>
-                <p>请在上方输入框中输入您的问题，点击"开始多轮对话"按钮开始聊天</p>
-                <p>支持富文本消息和连续对话</p>
-            </div>
+        <h3>AI回复内容（打字机效果）:</h3>
+        <div id="aiResponse" style="border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 10px; background: #fff;">
+            等待AI回复...
         </div>
 
-
+        <!-- 多轮对话测试区 -->
+        <hr>
+        <h3>多轮对话测试</h3>
+        <div id="multiTurnHistory" style="border:1px solid #ccc; min-height:120px; max-height:300px; overflow-y:auto; background:#f9f9f9; padding:10px; margin-bottom:10px;"></div>
+        <div style="display:flex; gap:10px;">
+            <input type="text" id="multiTurnInput" style="flex:1; padding:6px; font-size:15px;" placeholder="请输入你的消息..." onkeydown="if(event.key==='Enter'){sendMultiTurnMessage();}">
+            <button onclick="sendMultiTurnMessage()">发送</button>
+            <button onclick="loadMultiTurnHistory()">刷新历史</button>
+        </div>
+        <button onclick="sendRichMessage()">发送富文本消息（测试）</button>
     </div>
 
     <hr>
@@ -201,26 +206,6 @@
             padding-left: 2em;
             margin: 0 0 16px;
         }
-        
-        /* 消息操作按钮样式 */
-        .message-actions button {
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .message-actions button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-        .message-actions button:active {
-            transform: translateY(0);
-        }
-        
-        /* 消息容器悬停效果 */
-        .user-message > div:hover,
-        .ai-message > div:hover {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            transition: box-shadow 0.2s ease;
-        }
     </style>
 
     <script>
@@ -274,13 +259,14 @@
             div.scrollTop = div.scrollHeight;
         }
 
-        // 清空日志（不清空多轮对话窗口）
+        // 清空日志
         function clearLog() {
             document.getElementById('streamLog').innerHTML = '';
             document.getElementById('streamStatusLog').innerHTML = '';
             document.getElementById('streamAIResponseLog').innerHTML = '';
             document.getElementById('streamToolLog').innerHTML = '';
             document.getElementById('streamErrorLog').innerHTML = '';
+            document.getElementById('aiResponse').innerHTML = '';
         }
 
         // 1. 健康检查
@@ -436,35 +422,23 @@
             }
         }
 
-        // 4. 开始多轮对话（包含富文本）
-        async function startMultiTurnChat() {
+        // 4. 开始流式分析 (修复版本 - 参考工作正常的前端代码)
+        async function startAnalysis() {
             const query = document.getElementById('analysisQuery').value.trim();
             if (!query) {
-                alert('请输入您的问题或需求');
+                alert('请输入分析查询');
                 return;
             }
-            
-            // 如果没有当前对话，先创建一个
-            if (!currentConversationId) {
-                await createNewConversation();
-            }
 
-            // 不清空任何内容，保持日志和对话历史
+            // 清空之前的内容
+            clearLog();
             
             // 更新按钮状态
             document.getElementById('analyzeBtn').disabled = true;
             document.getElementById('stopBtn').disabled = false;
 
-            log('=== 开始多轮对话 ===');
-            log('用户消息: ' + query);
-            
-            // 在多轮对话窗口中显示用户消息
-            addUserMessageToChat(query);
-            
-            // 重置AI消息状态，准备接收新的AI回复
-            const aiDiv = document.getElementById('aiResponse');
-            aiDiv.currentAIMessage = null;
-            aiDiv.typingText = null;
+            log('=== 开始流式分析 ===');
+            log('分析查询: ' + query);
 
             try {
                 // 🔥 关键修复：使用正确的流式请求方式
@@ -477,12 +451,11 @@
                         'X-User-ID': currentUserId,
                         'X-Username': encodeURIComponent(currentUsername)
                     },
-                                    body: JSON.stringify({ 
-                    query: query,
-                    userId: currentUserId,
-                    username: currentUsername,
-                    conversation_id: currentConversationId
-                })
+                    body: JSON.stringify({ 
+                        query: query,
+                        userId: currentUserId,
+                        username: currentUsername
+                    })
                 });
 
                 if (!response.ok) {
@@ -500,7 +473,7 @@
                         const { done, value } = await reader.read();
                         
                         if (done) {
-                            log('=== 多轮对话回复完成 ===');
+                            log('=== 流式分析完成 ===');
                             break;
                         }
                         
@@ -546,15 +519,12 @@
                 }
 
             } catch (error) {
-                log('多轮对话出错: ' + error.message);
+                log('流式分析出错: ' + error.message);
                 console.error('Stream error:', error);
             } finally {
                 // 恢复按钮状态
                 document.getElementById('analyzeBtn').disabled = false;
                 document.getElementById('stopBtn').disabled = true;
-                
-                // 清空输入框，准备下一轮对话
-                document.getElementById('analysisQuery').value = '';
             }
         }
 
@@ -570,17 +540,12 @@
                     
                 case 'ai_response':
                     const aiDiv = document.getElementById('aiResponse');
-                    // 检查是否是新的AI回复（每次发送消息时都需要创建新的AI消息框）
-                    if (!aiDiv.currentAIMessage) {
-                        // 创建新的AI消息
-                        addAIMessageToChat('');
-                        aiDiv.currentAIMessage = aiDiv.querySelector('.ai-message:last-child .message-content');
-                        aiDiv.typingText = new TypingText(aiDiv.currentAIMessage, {
+                    if (!aiDiv.typingText) {
+                        aiDiv.typingText = new TypingText(aiDiv, {
                             speed: 20,
                             cursor: true,
                             onComplete: () => {
                                 aiDiv.scrollTop = aiDiv.scrollHeight;
-                                // 不要立即清空，等待下次新消息时再创建
                             }
                         });
                     }
@@ -607,222 +572,10 @@
                     log(`[错误] ${data.message}`);
                     break;
                     
-                case 'user_message_id':
-                    // 更新最后一条用户消息的ID
-                    const tempUserMessage = document.querySelector('[data-message-id="temp"].user-message');
-                    if (tempUserMessage) {
-                        tempUserMessage.setAttribute('data-message-id', data.message_id);
-                        // 添加操作按钮
-                        const messageContainer = tempUserMessage.querySelector('div');
-                        const actionsHTML = `
-                            <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                                <button onclick="editMessage('${data.message_id}', 'user')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #007bff; border: 1px solid #007bff; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                                <button onclick="deleteMessage('${data.message_id}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                            </div>
-                        `;
-                        messageContainer.insertAdjacentHTML('beforeend', actionsHTML);
-                        
-                        // 添加鼠标悬停事件
-                        const actionsDiv = messageContainer.querySelector('.message-actions');
-                        messageContainer.addEventListener('mouseenter', () => {
-                            actionsDiv.style.display = 'flex';
-                        });
-                        messageContainer.addEventListener('mouseleave', () => {
-                            actionsDiv.style.display = 'none';
-                        });
-                    }
-                    log(`[消息ID] 用户消息ID: ${data.message_id}`);
-                    break;
-                    
-                case 'ai_message_id':
-                    // 更新最后一条AI消息的ID
-                    const tempAIMessage = document.querySelector('[data-message-id="temp"].ai-message');
-                    if (tempAIMessage) {
-                        tempAIMessage.setAttribute('data-message-id', data.message_id);
-                        // 添加操作按钮
-                        const messageContainer = tempAIMessage.querySelector('div');
-                        const actionsHTML = `
-                            <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                                <button onclick="editMessage('${data.message_id}', 'assistant')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #28a745; border: 1px solid #28a745; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                                <button onclick="deleteMessage('${data.message_id}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                            </div>
-                        `;
-                        messageContainer.insertAdjacentHTML('beforeend', actionsHTML);
-                        
-                        // 添加鼠标悬停事件
-                        const actionsDiv = messageContainer.querySelector('.message-actions');
-                        messageContainer.addEventListener('mouseenter', () => {
-                            actionsDiv.style.display = 'flex';
-                        });
-                        messageContainer.addEventListener('mouseleave', () => {
-                            actionsDiv.style.display = 'none';
-                        });
-                    }
-                    log(`[消息ID] AI消息ID: ${data.message_id}`);
-                    break;
-                    
                 default:
                     logByType('default', JSON.stringify(data));
                     log(`[未知消息] ${JSON.stringify(data)}`);
             }
-        }
-
-        // 清空多轮对话窗口
-        function clearMultiTurnChatWindow() {
-            const chatDiv = document.getElementById('aiResponse');
-            chatDiv.innerHTML = `
-                <div style="text-align: center; color: #666; padding: 40px;">
-                    <p>📱 多轮对话模式</p>
-                    <p>请在上方输入框中输入您的问题，点击"开始多轮对话"按钮开始聊天</p>
-                    <p>支持富文本消息和连续对话</p>
-                </div>
-            `;
-            // 重置状态
-            chatDiv.currentAIMessage = null;
-            chatDiv.typingText = null;
-        }
-
-        // 添加用户消息到多轮对话窗口
-        function addUserMessageToChat(message, messageId = null) {
-            const chatDiv = document.getElementById('aiResponse');
-            
-            // 如果是第一条消息，清空欢迎信息
-            if (chatDiv.innerHTML.includes('多轮对话模式')) {
-                chatDiv.innerHTML = '';
-            }
-            
-            const userDiv = document.createElement('div');
-            userDiv.className = 'user-message';
-            userDiv.style.marginBottom = '16px';
-            userDiv.style.display = 'flex';
-            userDiv.style.justifyContent = 'flex-end';
-            userDiv.setAttribute('data-message-id', messageId || 'temp');
-            
-            userDiv.innerHTML = `
-                <div style="max-width: 70%; padding: 12px 16px; background: #007bff; color: white; border-radius: 18px 18px 4px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; group;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">👤 我</div>
-                    <div class="message-text" style="white-space: pre-wrap;">${message}</div>
-                    ${messageId ? `
-                    <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                        <button onclick="editMessage('${messageId}', 'user')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #007bff; border: 1px solid #007bff; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                        <button onclick="deleteMessage('${messageId}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                    </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            // 添加鼠标悬停事件
-            if (messageId) {
-                const messageContainer = userDiv.querySelector('div');
-                const actionsDiv = userDiv.querySelector('.message-actions');
-                
-                messageContainer.addEventListener('mouseenter', () => {
-                    actionsDiv.style.display = 'flex';
-                });
-                messageContainer.addEventListener('mouseleave', () => {
-                    actionsDiv.style.display = 'none';
-                });
-            }
-            
-            chatDiv.appendChild(userDiv);
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
-        
-        // 添加AI消息到多轮对话窗口
-        function addAIMessageToChat(content, messageId = null) {
-            const chatDiv = document.getElementById('aiResponse');
-            
-            const aiDiv = document.createElement('div');
-            aiDiv.className = 'ai-message';
-            aiDiv.style.marginBottom = '16px';
-            aiDiv.style.display = 'flex';
-            aiDiv.style.justifyContent = 'flex-start';
-            aiDiv.setAttribute('data-message-id', messageId || 'temp');
-            
-            aiDiv.innerHTML = `
-                <div style="max-width: 70%; padding: 12px 16px; background: #f1f3f4; color: #333; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">🤖 AI助手</div>
-                    <div class="message-content" style="white-space: pre-wrap;">${content}</div>
-                    ${messageId ? `
-                    <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                        <button onclick="editMessage('${messageId}', 'assistant')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #28a745; border: 1px solid #28a745; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                        <button onclick="deleteMessage('${messageId}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                    </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            // 添加鼠标悬停事件
-            if (messageId) {
-                const messageContainer = aiDiv.querySelector('div');
-                const actionsDiv = aiDiv.querySelector('.message-actions');
-                
-                messageContainer.addEventListener('mouseenter', () => {
-                    actionsDiv.style.display = 'flex';
-                });
-                messageContainer.addEventListener('mouseleave', () => {
-                    actionsDiv.style.display = 'none';
-                });
-            }
-            
-            chatDiv.appendChild(aiDiv);
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
-
-        // 从消息内容中提取文本
-        function extractTextContent(content) {
-            if (typeof content === 'string') {
-                return content;
-            }
-            if (Array.isArray(content)) {
-                let text = '';
-                content.forEach(block => {
-                    if (block.type === 'text') {
-                        text += block.text;
-                    } else if (block.type === 'tool_use') {
-                        text += `[使用工具: ${block.name}]`;
-                    } else if (block.type === 'tool_result') {
-                        text += `[工具结果]`;
-                    }
-                });
-                return text;
-            }
-            return String(content);
-        }
-
-        // 渲染历史消息到多轮对话窗口
-        function renderHistoryMessages(messages) {
-            if (!messages || messages.length === 0) {
-                log('📚 当前对话暂无历史消息');
-                return;
-            }
-            
-            log(`📚 正在加载 ${messages.length} 条历史消息...`);
-            
-            // 清空窗口
-            const chatDiv = document.getElementById('aiResponse');
-            chatDiv.innerHTML = '';
-            
-            // 渲染每条消息
-            messages.forEach((msg, index) => {
-                if (msg.role === 'user') {
-                    const textContent = extractTextContent(msg.content);
-                    if (textContent.trim()) {
-                        addUserMessageToChat(textContent, msg.id);
-                    }
-                } else if (msg.role === 'assistant') {
-                    const textContent = extractTextContent(msg.content);
-                    if (textContent.trim()) {
-                        addAIMessageToChat(textContent, msg.id);
-                    }
-                }
-                // 跳过tool_result消息，因为它们通常包含在assistant消息中
-            });
-            
-            // 滚动到底部
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-            
-            log(`✅ 历史消息加载完成，共显示 ${messages.length} 条消息`);
         }
 
         // 停止分析
@@ -983,10 +736,6 @@
                 if (data.success) {
                     currentConversationId = data.conversation.conversation_id;
                     log('新对话创建成功: ' + data.conversation.conversation_name);
-                    
-                    // 清空多轮对话窗口，显示新对话的欢迎信息
-                    clearMultiTurnChatWindow();
-                    
                     getConversationsList();
                     getCurrentConversation();
                 } else {
@@ -1023,7 +772,6 @@
                                     <div style="font-size: 12px; color: #666;">创建时间: ${conv.created_time}</div>
                                     <div style="font-size: 12px; color: #666;">消息数: ${conv.message_count}</div>
                                     <button onclick="switchToConversation('${conv.conversation_id}')" style="margin-top: 5px; padding: 2px 8px; font-size: 11px;">切换到此对话</button>
-                                    <button onclick="deleteConversation('${conv.conversation_id}', '${conv.conversation_name}')" style="margin-top: 5px; margin-left: 5px; padding: 2px 8px; font-size: 11px; background-color: #ff4444; color: white; border: none; border-radius: 3px;">删除</button>
                                 </div>
                             `;
                         });
@@ -1064,14 +812,6 @@
                         <div><strong>最后活动:</strong> ${conv.last_activity}</div>
                         <div><strong>消息数:</strong> ${conv.message_count}</div>
                     `;
-                    
-                    // 加载历史消息到多轮对话窗口
-                    if (conv.messages) {
-                        renderHistoryMessages(conv.messages);
-                    } else {
-                        clearMultiTurnChatWindow();
-                    }
-                    
                     log('当前对话信息获取成功: ' + conv.conversation_name);
                 } else {
                     document.getElementById('currentConversationInfo').innerHTML = '未获取到当前对话信息';
@@ -1102,14 +842,6 @@
                 if (data.success) {
                     currentConversationId = data.current_conversation.conversation_id;
                     log('对话切换成功: ' + data.current_conversation.conversation_name);
-                    
-                    // 加载历史消息到多轮对话窗口
-                    if (data.current_conversation.messages) {
-                        renderHistoryMessages(data.current_conversation.messages);
-                    } else {
-                        clearMultiTurnChatWindow();
-                    }
-                    
                     getCurrentConversation();
                     getConversationsList();
                 } else {
@@ -1127,145 +859,231 @@
             switchConversation();
         }
 
-        // 删除对话函数
-        async function deleteConversation(conversationId, conversationName) {
-            try {
-                if (!confirm(`确定要删除对话"${conversationName}"吗？此操作无法撤销！`)) {
-                    return;
-                }
-                
-                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
-                    method: 'DELETE',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`对话"${conversationName}"删除成功`);
-                    // 刷新对话列表
-                    getConversationsList();
-                    // 刷新当前对话信息
-                    getCurrentConversation();
-                } else {
-                    alert('删除失败: ' + data.message);
-                    log('删除对话失败: ' + data.message);
-                }
-            } catch (error) {
-                alert('删除对话出错: ' + error.message);
-                log('删除对话出错: ' + error.message);
+        // 多轮对话测试相关
+        async function sendMultiTurnMessage() {
+            const input = document.getElementById('multiTurnInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            if (!currentConversationId) {
+                alert('请先创建并切换到一个对话');
+                return;
             }
+            input.value = '';
+            log('[多轮对话] 发送: ' + msg);
+            await startAnalysisWithMessage(msg, currentConversationId);
+            setTimeout(loadMultiTurnHistory, 1000);
         }
-
-        // 编辑消息函数
-        async function editMessage(messageId, role) {
-            try {
-                if (!currentConversationId) {
-                    alert('请先选择一个对话');
-                    return;
-                }
-                
-                // 获取当前消息内容
-                const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-                if (!messageElement) {
-                    alert('找不到要编辑的消息');
-                    return;
-                }
-                
-                const currentText = messageElement.querySelector('.message-text, .message-content').textContent;
-                
-                // 弹出编辑对话框
-                const newContent = prompt('编辑消息内容:', currentText);
-                if (newContent === null || newContent.trim() === '') {
-                    return; // 用户取消或输入为空
-                }
-                
-                if (newContent === currentText) {
-                    return; // 内容未变化
-                }
-                
-                log(`📝 正在编辑消息 ${messageId}...`);
-                
-                // 发送编辑请求
-                const response = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}/messages/${messageId}/edit`, {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({
-                        new_content: newContent
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`✅ 消息编辑成功`);
-                    
-                    // 更新前端显示
-                    const textElement = messageElement.querySelector('.message-text, .message-content');
-                    textElement.textContent = newContent;
-                    
-                    // 刷新当前对话信息
-                    getCurrentConversation();
-                } else {
-                    alert('编辑消息失败: ' + data.message);
-                    log('编辑消息失败: ' + data.message);
-                }
-            } catch (error) {
-                alert('编辑消息出错: ' + error.message);
-                log('编辑消息出错: ' + error.message);
+        async function startAnalysisWithMessage(msg, conversationId) {
+            // 发送到流式分析接口，带上conversation_id
+            const response = await fetch('http://localhost:5000/api/analyze-stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'X-User-ID': currentUserId,
+                    'X-Username': encodeURIComponent(currentUsername)
+                },
+                body: JSON.stringify({
+                    query: msg,
+                    userId: currentUserId,
+                    username: currentUsername,
+                    conversation_id: conversationId
+                })
+            });
+            if (!response.ok) {
+                log('多轮对话流式分析请求失败: ' + response.statusText);
+                return;
             }
-        }
-
-        // 删除消息函数
-        async function deleteMessage(messageId) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let buffer = '';
             try {
-                if (!currentConversationId) {
-                    alert('请先选择一个对话');
-                    return;
-                }
-                
-                if (!confirm('确定要撤销这条消息吗？此操作无法撤销！')) {
-                    return;
-                }
-                
-                log(`🗑️ 正在删除消息 ${messageId}...`);
-                
-                // 发送删除请求
-                const response = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}/messages/${messageId}/delete`, {
-                    method: 'POST',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`✅ 消息删除成功`);
-                    
-                    // 从前端移除消息
-                    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-                    if (messageElement) {
-                        messageElement.remove();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+                    for (const line of lines) {
+                        const trimmedLine = line.trim();
+                        if (trimmedLine === '') continue;
+                        if (trimmedLine.startsWith('data: ')) {
+                            try {
+                                const jsonStr = trimmedLine.slice(6);
+                                if (jsonStr === '[DONE]') break;
+                                const data = JSON.parse(jsonStr);
+                                handleMultiTurnStreamMessage(data);
+                            } catch (parseError) {
+                                log('解析多轮流数据失败: ' + trimmedLine);
+                            }
+                        }
                     }
-                    
-                    // 刷新当前对话信息
-                    getCurrentConversation();
-                } else {
-                    alert('删除消息失败: ' + data.message);
-                    log('删除消息失败: ' + data.message);
                 }
-            } catch (error) {
-                alert('删除消息出错: ' + error.message);
-                log('删除消息出错: ' + error.message);
+            } finally {
+                reader.releaseLock();
             }
         }
-
-
-    </script>
-</body>
-</html>
-    </script>
-</body>
-</html>
+        function handleMultiTurnStreamMessage(data) {
+            if (data.type === 'ai_response') {
+                // 直接刷新历史
+                loadMultiTurnHistory();
+            }
+            // 也可根据需要处理status/tool_result等
+        }
+        async function loadMultiTurnHistory() {
+            if (!currentConversationId) {
+                document.getElementById('multiTurnHistory').innerHTML = '<em>请先创建并切换到一个对话</em>';
+                return;
+            }
+            const resp = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}`, {
+                method: 'GET',
+                headers: getHeaders()
+            });
+            const data = await resp.json();
+            if (data && data.conversation && data.conversation.messages) {
+                let html = '';
+                data.conversation.messages.forEach((msg, idx) => {
+                    html += `<div style=\"margin-bottom:8px;display:flex;${msg.role==='user'?'justify-content:flex-end;':''}\">`;
+                    html += `<div style=\"max-width:70%;padding:8px 12px;border-radius:12px;${msg.role==='user'?'background:#d2eaff;color:#222;':'background:#f3f3f3;color:#333;'};box-shadow:0 1px 2px #0001;\">`;
+                    html += `<b>${msg.role==='user'?'我':'AI'}</b>：`;
+                    // 渲染content数组
+                    if (Array.isArray(msg.content)) {
+                        msg.content.forEach(block => {
+                            if (block.type === 'text') {
+                                html += `<div style=\"white-space:pre-wrap;\">${block.text}</div>`;
+                            } else if (block.type === 'code') {
+                                html += `<pre><code>${block.code}</code></pre>`;
+                            } else if (block.type === 'image') {
+                                html += `<img src='${block.url}' style=\"max-width:100%;max-height:120px;\" />`;
+                            } else {
+                                html += `<div>[${block.type}]</div>`;
+                            }
+                        });
+                    } else if (typeof msg.content === 'string') {
+                        html += `<div style=\"white-space:pre-wrap;\">${msg.content}</div>`;
+                    } else {
+                        html += `<div>[未知内容]</div>`;
+                    }
+                    html += `<br><span style=\"font-size:11px;color:#888;\">${msg.timestamp}</span>`;
+                    html += `<div style=\"margin-top:4px;\">`;
+                    html += `<button onclick=\"editMessagePrompt('${msg.id}',${encodeURIComponent(JSON.stringify(msg.content))})\" style=\"font-size:11px;padding:1px 6px;\">编辑</button>`;
+                    html += `<button onclick=\"deleteMessageConfirm('${msg.id}')\" style=\"font-size:11px;padding:1px 6px;\">撤回</button>`;
+                    html += `<button onclick=\"showRawJson(${idx})\" style=\"font-size:11px;padding:1px 6px;\">原始JSON</button>`;
+                    html += `<div id=\"rawJson${idx}\" style=\"display:none;white-space:pre-wrap;font-size:12px;background:#f6f6f6;margin-top:4px;\"></div>`;
+                    html += `</div></div></div>`;
+                });
+                document.getElementById('multiTurnHistory').innerHTML = html;
+                // 自动滚动到底部
+                const historyDiv = document.getElementById('multiTurnHistory');
+                historyDiv.scrollTop = historyDiv.scrollHeight;
+            } else {
+                document.getElementById('multiTurnHistory').innerHTML = '<em>暂无历史</em>';
+            }
+        }
+        // 显示原始JSON
+        function showRawJson(idx) {
+            const div = document.getElementById('rawJson'+idx);
+            if (div.style.display === 'none') {
+                const data = document.getElementById('multiTurnHistory').__lastData;
+                if (data && data.conversation && data.conversation.messages && data.conversation.messages[idx]) {
+                    div.textContent = JSON.stringify(data.conversation.messages[idx], null, 2);
+                }
+                div.style.display = 'block';
+            } else {
+                div.style.display = 'none';
+            }
+        }
+        // 编辑消息弹窗，支持编辑所有text段
+        function editMessagePrompt(msgId, contentJson) {
+            let contentArr;
+            try {
+                contentArr = JSON.parse(decodeURIComponent(contentJson));
+            } catch {
+                contentArr = [{type:'text', text:''}];
+            }
+            let textBlocks = contentArr.filter(b=>b.type==='text');
+            let newTexts = textBlocks.map((b,i)=>prompt('编辑第'+(i+1)+'段文本：', b.text));
+            let idx = 0;
+            contentArr.forEach(block=>{
+                if(block.type==='text'){
+                    block.text = newTexts[idx++] ?? block.text;
+                }
+            });
+            editMessage(msgId, contentArr);
+        }
+        async function editMessage(msgId, newContentArr) {
+            if (!currentConversationId) return;
+            const resp = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}/messages/${msgId}/edit`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ new_content: newContentArr })
+            });
+            const data = await resp.json();
+            if (data.success) {
+                log('消息编辑成功');
+                loadMultiTurnHistory();
+            } else {
+                alert('编辑失败: ' + data.message);
+            }
+        }
+        // 撤回消息确认
+        function deleteMessageConfirm(msgId) {
+            if (!confirm('确定要撤回/删除该消息吗？')) return;
+            deleteMessage(msgId);
+        }
+        async function deleteMessage(msgId) {
+            if (!currentConversationId) return;
+            const resp = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}/messages/${msgId}/delete`, {
+                method: 'POST',
+                headers: getHeaders()
+            });
+            const data = await resp.json();
+            if (data.success) {
+                log('消息撤回成功');
+                loadMultiTurnHistory();
+            } else {
+                alert('撤回失败: ' + data.message);
+            }
+        }
+        // 发送富文本消息测试
+        async function sendRichMessage() {
+            if (!currentConversationId) {
+                alert('请先创建并切换到一个对话');
+                return;
+            }
+            const richContent = [
+                {type:'text', text:'这是一段富文本消息'},
+                {type:'code', language:'python', code:'print("Hello World")'},
+                {type:'image', url:'https://placekitten.com/200/140'}
+            ];
+            await fetch('http://localhost:5000/api/analyze-stream', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'X-User-ID': currentUserId,
+                    'X-Username': encodeURIComponent(currentUsername)
+                },
+                body: JSON.stringify({
+                    query: richContent,
+                    userId: currentUserId,
+                    username: currentUsername,
+                    conversation_id: currentConversationId
+                })
+            });
+            setTimeout(loadMultiTurnHistory, 1000);
+        }
+        // 在多轮对话区下方加一个按钮
+        document.addEventListener('DOMContentLoaded', function() {
+            const btn = document.createElement('button');
+            btn.textContent = '发送富文本消息（测试）';
+            btn.onclick = sendRichMessage;
+            btn.style = 'margin:8px 0;padding:4px 12px;font-size:13px;';
+            const multiTurnDiv = document.getElementById('multiTurnInput').parentNode.parentNode;
+            multiTurnDiv.appendChild(btn);
+        });
     </script>
 </body>
 </html>

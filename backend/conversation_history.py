@@ -86,6 +86,9 @@ class ConversationHistoryManager:
             新对话信息
         """
         try:
+            # 清除analysis.db中的旧数据
+            self._clear_analysis_db()
+            
             # 生成对话ID和时间戳
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
             conversation_id = f"conv_{timestamp}"
@@ -605,24 +608,51 @@ class ConversationHistoryManager:
             if conv_info['user_id'] != user_id:
                 return False
             
-            # 删除数据库文件
-            history_path = Path(conv_info['history_path'])
-            if history_path.exists():
-                history_path.unlink()
-            
-            # 删除数据库文件（如果存在）
-            db_path = Path(conv_info['db_path'])
-            if db_path.exists():
-                db_path.unlink()
-            
-            # 从元数据中删除
-            del self.conversations_meta['conversations'][conversation_id]
-            
-            # 如果删除的是当前对话，清空当前对话
+            # 如果删除的是当前对话，先清空当前对话状态，释放文件占用
             if self.current_conversation_id == conversation_id:
                 self.current_conversation_id = None
                 self.db_path = None
                 self.conversations_meta['current_conversation_id'] = None
+                logging.info(f"清空当前对话状态，准备删除: {conversation_id}")
+            
+            # 强制关闭可能的数据库连接
+            import gc
+            gc.collect()
+            
+            # 删除数据库文件
+            history_path = Path(conv_info['history_path'])
+            if history_path.exists():
+                try:
+                    history_path.unlink()
+                    logging.info(f"删除历史数据库文件: {history_path}")
+                except PermissionError as e:
+                    logging.warning(f"无法删除历史数据库文件 {history_path}: {e}")
+                    # 如果无法删除，尝试重命名为.deleted后缀
+                    try:
+                        deleted_path = history_path.with_suffix('.deleted')
+                        history_path.rename(deleted_path)
+                        logging.info(f"文件重命名为: {deleted_path}")
+                    except Exception as rename_error:
+                        logging.error(f"重命名文件也失败: {rename_error}")
+            
+            # 删除数据库文件（如果存在）
+            db_path = Path(conv_info['db_path'])
+            if db_path.exists():
+                try:
+                    db_path.unlink()
+                    logging.info(f"删除数据库文件: {db_path}")
+                except PermissionError as e:
+                    logging.warning(f"无法删除数据库文件 {db_path}: {e}")
+                    # 如果无法删除，尝试重命名为.deleted后缀
+                    try:
+                        deleted_path = db_path.with_suffix('.deleted')
+                        db_path.rename(deleted_path)
+                        logging.info(f"文件重命名为: {deleted_path}")
+                    except Exception as rename_error:
+                        logging.error(f"重命名文件也失败: {rename_error}")
+            
+            # 从元数据中删除
+            del self.conversations_meta['conversations'][conversation_id]
             
             # 保存元数据
             self._save_conversations_meta()
@@ -800,3 +830,77 @@ class ConversationHistoryManager:
         except Exception as e:
             logging.error(f"撤回/删除指定消息时出错: {e}")
             return False 
+    
+    def _clear_analysis_db(self):
+        """
+        重置analysis.db文件
+        在创建新对话时调用，确保数据隔离
+        """
+        try:
+            import sqlite3
+            import os
+            
+            # 获取analysis.db路径
+            analysis_db_path = self.user_paths['db_path']
+            
+            logging.info(f"🧹 正在重置analysis.db文件: {analysis_db_path}")
+            
+            # 方法1: 如果文件存在，先删除它
+            if analysis_db_path.exists():
+                try:
+                    os.remove(analysis_db_path)
+                    logging.info("✅ 已删除旧的analysis.db文件")
+                except Exception as e:
+                    logging.warning(f"⚠️ 删除旧文件失败: {e}")
+                    # 如果删除失败，尝试清空所有表
+                    try:
+                        with sqlite3.connect(analysis_db_path) as conn:
+                            cursor = conn.cursor()
+                            
+                            # 获取所有表名
+                            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+                            tables = cursor.fetchall()
+                            
+                            if tables:
+                                logging.info(f"🗑️ 正在删除 {len(tables)} 个表")
+                                
+                                # 删除所有用户数据表
+                                for table in tables:
+                                    table_name = table[0]
+                                    try:
+                                        cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                                        logging.info(f"✅ 已删除表: {table_name}")
+                                    except Exception as e:
+                                        logging.warning(f"⚠️ 删除表 {table_name} 时出错: {e}")
+                                
+                                conn.commit()
+                                logging.info("🎉 表清除完成")
+                    except Exception as e:
+                        logging.error(f"❌ 清空表失败: {e}")
+            
+            # 方法2: 创建一个全新的空数据库文件
+            try:
+                with sqlite3.connect(analysis_db_path) as conn:
+                    cursor = conn.cursor()
+                    # 创建一个简单的元数据表来标记数据库已初始化
+                    cursor.execute('''
+                        CREATE TABLE IF NOT EXISTS _db_info (
+                            key TEXT PRIMARY KEY,
+                            value TEXT,
+                            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                        )
+                    ''')
+                    cursor.execute('''
+                        INSERT OR REPLACE INTO _db_info (key, value) 
+                        VALUES ('reset_time', ?)
+                    ''', (datetime.now().isoformat(),))
+                    conn.commit()
+                
+                logging.info("🎉 analysis.db重置完成，新对话数据已隔离")
+                
+            except Exception as e:
+                logging.error(f"❌ 创建新数据库失败: {e}")
+                    
+        except Exception as e:
+            logging.error(f"❌ 重置analysis.db时出错: {e}")
+            # 不抛出异常，避免影响对话创建

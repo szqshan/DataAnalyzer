@@ -273,7 +273,7 @@ def analyze_data_stream(user_data):
                 print(f"\n{start_msg}")
                 yield f"data: {json.dumps({'type': 'status', 'message': start_msg})}\n\n"
                 # 构建系统提示词
-                system_prompt = f"""你是专业的数据分析师。请根据用户需求智能分析并决定是否需要查询数据库。\n\n**分析流程：**\n1. 首先分析用户的具体需求\n2. 检查历史对话中是否已有相关信息\n3. 判断当前已有的信息是否足够回答用户问题\n4. 如果已有信息不足，则调用 get_table_info 获取表结构，然后执行相应的SQL查询\n5. 如果已有信息足够，直接基于已有信息进行分析和回答\n\n**重要原则：**\n- 优先使用历史对话中的已有信息\n- 避免重复查询已知信息\n- 只在必要时调用数据库查询工具\n- 确保回答准确、完整、有用\n- 如果用户询问的是之前分析过的内容，直接引用历史结果\n- 绝对禁用类似SELECT * FROM data_table这种返回大量信息的命令，尽量使用统计类命令\n- 如果无法完成用户需求，请直接告诉用户无法完成，不要编造数据\n- 告诉用户你的查询过程\n- 根据用户提供的信息，如果缺少必要的信息，你可以质疑用户的需求，但不要直接拒绝\n- 如果用户提供的信息不准确，你可以质疑用户的需求，但不要直接拒绝\n- 如果用户的问题不明确，你需要询问一下用户，不要胡乱分析\n\n**可用工具：**\n- get_table_info: 获取表结构信息\n- query_database: 执行SQL查询获取数据\n\n**当前上下文：**\n- 用户: {user_data['username']}\n- 数据库: {analyzer.current_db_path}\n- 表名: {analyzer.current_table_name}\n- 当前对话: {current_conversation['conversation_name']}\n- 对话ID: {current_conversation['conversation_id']}\n\n{context_info}\n**当前用户需求:** {query}\n\n请根据以上原则和历史上下文，智能判断是否需要查询数据库，然后提供专业的分析回答。如果历史对话中已有相关信息，请优先使用并适当引用。"""
+                system_prompt = f"""你是专业的数据分析师。请根据用户需求智能分析并决定是否需要查询数据库。\n\n**分析流程：**\n1. 首先分析用户的具体需求\n2. 检查历史对话中是否已有相关信息\n3. 判断当前已有的信息是否足够回答用户问题\n4. 如果已有信息不足，则调用 get_table_info 获取表结构，然后执行相应的SQL查询\n5. 如果已有信息足够，直接基于已有信息进行分析和回答\n6.回答问题前，适当的夸奖用户提供的数据或提出点击问题\n**重要原则：**\n- 优先使用历史对话中的已有信息\n- 避免重复查询已知信息\n- 只在必要时调用数据库查询工具\n- 确保回答准确、完整、有用\n- 如果用户询问的是之前分析过的内容，直接引用历史结果\n- 绝对禁用类似SELECT * FROM data_table这种返回大量信息的命令，尽量使用统计类命令\n- 如果无法完成用户需求，请直接告诉用户无法完成，不要编造数据\n- 告诉用户你的查询过程\n- 根据用户提供的信息，如果缺少必要的信息，你可以质疑用户的需求，但不要直接拒绝\n- 如果用户提供的信息不准确，你可以质疑用户的需求，但不要直接拒绝\n- 如果用户的问题不明确，你需要询问一下用户，不要胡乱分析\n\n**可用工具：**\n- get_table_info: 获取表结构信息\n- query_database: 执行SQL查询获取数据\n\n**当前上下文：**\n- 用户: {user_data['username']}\n- 数据库: {analyzer.current_db_path}\n- 表名: {analyzer.current_table_name}\n- 当前对话: {current_conversation['conversation_name']}\n- 对话ID: {current_conversation['conversation_id']}\n\n{context_info}\n**当前用户需求:** {query}\n\n请根据以上原则和历史上下文，智能判断是否需要查询数据库，然后提供专业的分析回答。如果历史对话中已有相关信息，请优先使用并适当引用。"""
                 # 仅首次分析时插入主记录
                 from backend.conversation_history import sqlite3
                 with sqlite3.connect(history_manager.db_path) as conn:
@@ -298,12 +298,20 @@ def analyze_data_stream(user_data):
                 else:
                     user_content_arr = user_content
                 
-                new_user_message = {
-                    "role": "user", 
-                    "content": user_content_arr, 
-                    "timestamp": datetime.now().isoformat()
-                }
-                messages.append(new_user_message)
+                # 使用append_message方法添加用户消息并获取消息ID
+                user_message_id = history_manager.append_message(
+                    current_conversation['conversation_id'], 
+                    "user", 
+                    user_content_arr
+                )
+                
+                # 发送用户消息ID给前端
+                if user_message_id:
+                    yield f"data: {json.dumps({'type': 'user_message_id', 'message_id': user_message_id})}\n\n"
+                
+                # 重新获取完整的消息历史（包含新添加的用户消息）
+                current_conversation = history_manager.get_current_conversation_info()
+                messages = current_conversation.get('messages', [])
                 print(f"📚 添加新用户消息，当前总消息数: {len(messages)}")
                 max_iterations = 100
                 iteration = 0
@@ -369,11 +377,20 @@ def analyze_data_stream(user_data):
                             elif chunk.type == "message_stop":
                                 print()
                                 break
-                        # 添加助手消息到历史
-                        messages.append(assistant_message)
-                        # 更新对话消息历史
-                        if current_conversation['conversation_id']:
-                            history_manager.update_conversation_messages(current_conversation['conversation_id'], messages)
+                        # 使用append_message方法添加AI消息并获取消息ID
+                        ai_message_id = history_manager.append_message(
+                            current_conversation['conversation_id'], 
+                            "assistant", 
+                            assistant_message["content"]
+                        )
+                        
+                        # 发送AI消息ID给前端
+                        if ai_message_id:
+                            yield f"data: {json.dumps({'type': 'ai_message_id', 'message_id': ai_message_id})}\n\n"
+                        
+                        # 重新获取完整的消息历史
+                        current_conversation = history_manager.get_current_conversation_info()
+                        messages = current_conversation.get('messages', [])
                         # 执行工具调用
                         if has_tool_calls:
                             tool_results = []
@@ -406,13 +423,16 @@ def analyze_data_stream(user_data):
                                         print(f"\n❌ {error_msg}")
                                         yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
                             if tool_results:
-                                messages.append({
-                                    "role": "user",
-                                    "content": tool_results
-                                })
-                                # ✅ 工具结果添加后，重新保存完整的消息历史
-                                if current_conversation['conversation_id']:
-                                    history_manager.update_conversation_messages(current_conversation['conversation_id'], messages)
+                                # 使用append_message方法添加工具结果消息
+                                tool_message_id = history_manager.append_message(
+                                    current_conversation['conversation_id'], 
+                                    "user", 
+                                    tool_results
+                                )
+                                
+                                # 重新获取完整的消息历史
+                                current_conversation = history_manager.get_current_conversation_info()
+                                messages = current_conversation.get('messages', [])
                             # 更新工具调用记录
                             if current_conversation['conversation_id'] and tool_calls:
                                 history_manager.update_tool_calls(current_conversation['conversation_id'], tool_calls)
