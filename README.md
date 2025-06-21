@@ -15,12 +15,17 @@
 
 **📖 详细文档：**
 - **[API调用示例文档](./API_EXAMPLES.md)** - 完整的API调用示例和代码
+- **[数据处理功能说明](./DATA_PROCESSING_FEATURE.md)** - 多格式支持和数据清洗功能详解
+- **[多表功能说明](./MULTI_TABLE_FEATURE.md)** - 多表支持和跨表查询功能说明
 - **[系统架构说明](#-系统架构)** - 技术架构和设计原理
 
 ## 🌟 核心功能
 
 - 📊 **智能数据分析**：基于Anthropic Claude AI的智能数据分析和洞察
-- 📁 **CSV数据导入**：支持CSV文件上传并自动导入SQLite数据库
+- 📁 **多格式文件支持**：支持CSV、Excel、JSON、TSV、TXT等多种文件格式
+- 🔍 **数据质量评估**：智能检测数据质量问题，提供0-100分的综合评分
+- 🧹 **自动数据清洗**：智能处理缺失值、重复数据、异常值等问题
+- 🔗 **多表支持**：单次会话中可分析多个数据表，支持跨表查询
 - 💬 **多轮对话**：支持与AI进行多轮对话，保持上下文连续性
 - 📚 **对话历史管理**：完整的对话历史记录和管理功能
 - 👥 **多用户支持**：支持多用户隔离，每个用户有独立的数据空间
@@ -185,7 +190,8 @@ GET /api/status?userId=your_user_id&username=your_username&apiKey=sk-ant-api-you
 |------|------|------|-------------|
 | `/api/health` | GET | 系统健康检查 | ❌ |
 | `/api/status` | GET | 获取系统状态 | ✅ |
-| `/api/upload` | POST | 上传CSV数据文件 | ✅ |
+| `/api/preview-file` | POST | 预览文件和数据质量评估 | ✅ |
+| `/api/upload` | POST | 上传多格式数据文件（增强版） | ✅ |
 | `/api/analyze-stream` | POST | 流式AI数据分析 | ✅ |
 | `/api/conversations/create` | POST | 创建新对话 | ❌ |
 | `/api/conversations/list` | GET | 获取对话列表 | ❌ |

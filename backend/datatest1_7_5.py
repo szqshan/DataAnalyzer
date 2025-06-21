@@ -9,6 +9,7 @@ from datetime import datetime
 import json
 import re
 from typing import Dict, List, Optional, Any
+from .data_processor import DataProcessor
 
 class DatabaseAnalyzer:
     """P1精简版数据库分析器类 - 专注核心数据处理功能，支持多表管理"""
@@ -31,6 +32,7 @@ class DatabaseAnalyzer:
         self.current_db_path = None
         self.current_table_name = None  # 保持兼容性
         self.conversation_tables = []  # 新增：当前对话中的所有表
+        self.data_processor = DataProcessor()  # 新增：数据处理器
         
         # 定义工具 - 使用正确的格式
         self.tools = [
@@ -149,26 +151,48 @@ class DatabaseAnalyzer:
         
         return summary
         
-    def import_csv_to_sqlite(self, csv_file_path, table_name, db_path="analysis_db.db"):
-        """从CSV文件创建SQLite表并导入数据 - 支持多表共存"""
+    def import_file_to_sqlite(self, file_path, table_name, db_path="analysis_db.db", processing_options=None):
+        """从多种格式文件创建SQLite表并导入数据 - 支持多表共存和数据处理"""
         try:
-            print(f"📥 开始导入CSV文件: {csv_file_path}")
+            print(f"📥 开始导入文件: {file_path}")
             print(f"📊 目标数据库: {db_path}")
             print(f"📋 目标表名: {table_name}")
             
-            if not os.path.exists(csv_file_path):
-                print(f"❌ CSV文件不存在: {csv_file_path}")
-                return {"success": False, "message": f"CSV文件不存在: {csv_file_path}"}
+            if not os.path.exists(file_path):
+                print(f"❌ 文件不存在: {file_path}")
+                return {"success": False, "message": f"文件不存在: {file_path}"}
             
-            # 读取CSV文件
-            print("📖 正在读取CSV文件...")
-            df = pd.read_csv(csv_file_path, encoding='utf-8')
-            print(f"✅ CSV文件读取成功，共 {len(df)} 行")
+            # 检测文件格式
+            try:
+                file_format = self.data_processor.detect_file_format(file_path)
+                print(f"📋 检测到文件格式: {file_format}")
+            except ValueError as e:
+                print(f"❌ {str(e)}")
+                return {"success": False, "message": str(e)}
             
-            # 清理列名
-            print("🧹 正在清理列名...")
-            df.columns = [self._clean_column_name(col) for col in df.columns]
-            print(f"✅ 列名清理完成: {list(df.columns)}")
+            # 读取文件
+            print("📖 正在读取文件...")
+            try:
+                df = self.data_processor.read_file(file_path)
+                print(f"✅ 文件读取成功，共 {len(df)} 行 × {len(df.columns)} 列")
+            except Exception as e:
+                print(f"❌ 文件读取失败: {str(e)}")
+                return {"success": False, "message": f"文件读取失败: {str(e)}"}
+            
+            # 数据质量评估
+            print("🔍 开始数据质量评估...")
+            quality_report = self.data_processor.assess_data_quality(df)
+            
+            # 数据清洗（如果启用）
+            cleaning_log = None
+            if processing_options is None:
+                processing_options = {"enable_cleaning": True}
+            
+            if processing_options.get("enable_cleaning", True):
+                print("🧹 开始数据清洗...")
+                cleaning_options = processing_options.get("cleaning_options", {})
+                df, cleaning_log = self.data_processor.clean_data(df, cleaning_options)
+                print(f"✅ 数据清洗完成")
             
             # 连接到SQLite数据库
             print(f"🔌 正在连接数据库: {db_path}")
@@ -201,12 +225,17 @@ class DatabaseAnalyzer:
             self.current_db_path = db_path
             
             # 获取原始文件名
-            original_filename = os.path.basename(csv_file_path)
+            original_filename = os.path.basename(file_path)
             
             # 添加到对话表列表
             self.add_table_to_conversation(table_name, original_filename, list(df.columns), rows_count)
             
             print(f"✅ 导入完成，共导入 {rows_count} 行数据")
+            
+            # 生成处理报告
+            processing_report = None
+            if cleaning_log:
+                processing_report = self.data_processor.generate_processing_report(quality_report, cleaning_log)
             
             return {
                 "success": True,
@@ -214,12 +243,20 @@ class DatabaseAnalyzer:
                 "rows_imported": rows_count,
                 "columns": list(df.columns),
                 "table_name": table_name,
-                "total_tables": len(self.conversation_tables)
+                "total_tables": len(self.conversation_tables),
+                "file_format": file_format,
+                "quality_report": quality_report,
+                "cleaning_log": cleaning_log,
+                "processing_report": processing_report
             }
             
         except Exception as e:
             print(f"❌ 导入失败: {str(e)}")
             return {"success": False, "message": f"导入失败: {str(e)}"}
+    
+    def import_csv_to_sqlite(self, csv_file_path, table_name, db_path="analysis_db.db"):
+        """保持向后兼容性的CSV导入方法"""
+        return self.import_file_to_sqlite(csv_file_path, table_name, db_path)
     
     def _clean_column_name(self, col_name):
         """清理列名"""
