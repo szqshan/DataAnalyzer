@@ -1,5 +1,5 @@
-# P1精简版数据库分析器 - 清理调试输出
-# 版本: 3.1.0 - P1阶段精简版 - 多表支持
+# P1精简版数据库分析器 - 多表支持版本
+# 版本: 2.1.0 - 支持多个CSV文件上传和分析
 
 from anthropic import Anthropic
 import sqlite3
@@ -9,13 +9,29 @@ from datetime import datetime
 import json
 import re
 from typing import Dict, List, Optional, Any
-try:
-    from .data_processor import DataProcessor
-except ImportError:
-    from data_processor import DataProcessor
+import numpy as np
+
+def convert_to_json_serializable(obj):
+    """将包含numpy类型的对象转换为JSON可序列化的格式"""
+    if isinstance(obj, dict):
+        return {key: convert_to_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32, np.float16)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif pd.isna(obj):
+        return None
+    else:
+        return obj
 
 class DatabaseAnalyzer:
-    """P1精简版数据库分析器类 - 专注核心数据处理功能，支持多表管理"""
+    """P1精简版数据库分析器类 - 专注多表CSV分析功能"""
     
     def __init__(self, api_key, model_name="claude-sonnet-4-20250514", base_url=None):
         """
@@ -34,10 +50,9 @@ class DatabaseAnalyzer:
         self.model_name = model_name
         self.current_db_path = None
         self.current_table_name = None  # 保持兼容性
-        self.conversation_tables = []  # 新增：当前对话中的所有表
-        self.data_processor = DataProcessor()  # 新增：数据处理器
+        self.conversation_tables = []  # 当前对话中的所有表
         
-        # 定义工具 - 使用正确的格式
+        # 定义工具
         self.tools = [
             {
                 "name": "query_database",
@@ -86,13 +101,24 @@ class DatabaseAnalyzer:
         if not cleaned_name or len(cleaned_name) < 2:
             cleaned_name = "data_table"
         
+        # 确保表名不以数字开头（SQLite要求）
+        if cleaned_name and cleaned_name[0].isdigit():
+            cleaned_name = f"table_{cleaned_name}"
+        
         # 添加时间戳确保唯一性
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         table_name = f"{cleaned_name}_{timestamp}"
         
-        # 确保表名不超过SQLite限制（通常为64字符）
+        # 确保表名不超过SQLite限制
         if len(table_name) > 60:
-            table_name = f"{cleaned_name[:30]}_{timestamp}"
+            truncated_name = cleaned_name[:30]
+            if truncated_name and truncated_name[0].isdigit():
+                truncated_name = f"t_{truncated_name[1:]}"
+            table_name = f"{truncated_name}_{timestamp}"
+        
+        # 最后检查：确保表名符合SQLite标识符规范
+        if table_name and not (table_name[0].isalpha() or table_name[0] == '_'):
+            table_name = f"table_{table_name}"
         
         return table_name
     
@@ -153,49 +179,71 @@ class DatabaseAnalyzer:
             summary += f"   创建时间: {table['created_at'][:19]}\n\n"
         
         return summary
+    
+    def get_conversation_tables_info(self) -> List[Dict[str, Any]]:
+        """
+        获取当前对话中所有表的详细信息（用于API接口）
         
-    def import_file_to_sqlite(self, file_path, table_name, db_path="analysis_db.db", processing_options=None):
-        """从多种格式文件创建SQLite表并导入数据 - 支持多表共存和数据处理"""
+        Returns:
+            表信息数组
+        """
+        if not self.conversation_tables:
+            return []
+        
+        tables_info = []
+        for table in self.conversation_tables:
+            table_info = {
+                "table_name": table["table_name"],
+                "original_filename": table["original_filename"],
+                "row_count": table["row_count"],
+                "column_count": len(table["columns"]),
+                "columns": table["columns"],
+                "created_at": table["created_at"],
+                "description": table.get("description", f"数据表 {table['table_name']}")
+            }
+            tables_info.append(table_info)
+        
+        return convert_to_json_serializable(tables_info)
+        
+    def import_csv_to_sqlite(self, csv_file_path, table_name, db_path="analysis_db.db"):
+        """从CSV文件创建SQLite表并导入数据 - 支持多表共存"""
         try:
-            print(f"📥 开始导入文件: {file_path}")
+            print(f"📥 开始导入CSV文件: {csv_file_path}")
             print(f"📊 目标数据库: {db_path}")
             print(f"📋 目标表名: {table_name}")
             
-            if not os.path.exists(file_path):
-                print(f"❌ 文件不存在: {file_path}")
-                return {"success": False, "message": f"文件不存在: {file_path}"}
+            if not os.path.exists(csv_file_path):
+                print(f"❌ 文件不存在: {csv_file_path}")
+                return {"success": False, "message": f"文件不存在: {csv_file_path}"}
             
-            # 检测文件格式
+            # 读取CSV文件
+            print("📖 正在读取CSV文件...")
             try:
-                file_format = self.data_processor.detect_file_format(file_path)
-                print(f"📋 检测到文件格式: {file_format}")
-            except ValueError as e:
-                print(f"❌ {str(e)}")
-                return {"success": False, "message": str(e)}
-            
-            # 读取文件
-            print("📖 正在读取文件...")
-            try:
-                df = self.data_processor.read_file(file_path)
+                # 尝试多种编码
+                encodings = ['utf-8', 'gbk', 'gb2312', 'utf-8-sig', 'latin1']
+                df = None
+                used_encoding = None
+                
+                for encoding in encodings:
+                    try:
+                        df = pd.read_csv(csv_file_path, encoding=encoding)
+                        used_encoding = encoding
+                        print(f"✅ 使用编码 {encoding} 成功读取CSV文件")
+                        break
+                    except UnicodeDecodeError:
+                        continue
+                
+                if df is None:
+                    raise ValueError("无法使用常见编码读取CSV文件")
+                    
                 print(f"✅ 文件读取成功，共 {len(df)} 行 × {len(df.columns)} 列")
+                
             except Exception as e:
                 print(f"❌ 文件读取失败: {str(e)}")
                 return {"success": False, "message": f"文件读取失败: {str(e)}"}
             
-            # 数据质量评估
-            print("🔍 开始数据质量评估...")
-            quality_report = self.data_processor.assess_data_quality(df)
-            
-            # 数据清洗（如果启用）
-            cleaning_log = None
-            if processing_options is None:
-                processing_options = {"enable_cleaning": True}
-            
-            if processing_options.get("enable_cleaning", True):
-                print("🧹 开始数据清洗...")
-                cleaning_options = processing_options.get("cleaning_options", {})
-                df, cleaning_log = self.data_processor.clean_data(df, cleaning_options)
-                print(f"✅ 数据清洗完成")
+            # 清理列名
+            df.columns = [self._clean_column_name(col) for col in df.columns]
             
             # 连接到SQLite数据库
             print(f"🔌 正在连接数据库: {db_path}")
@@ -208,7 +256,7 @@ class DatabaseAnalyzer:
             
             if table_exists:
                 print(f"🔄 表 {table_name} 已存在，将替换数据...")
-                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
             else:
                 print(f"🆕 创建新表: {table_name}")
             
@@ -218,7 +266,7 @@ class DatabaseAnalyzer:
             
             # 获取导入的行数
             print("🔢 正在统计导入行数...")
-            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
             rows_count = cursor.fetchone()[0]
             
             conn.commit()
@@ -228,38 +276,28 @@ class DatabaseAnalyzer:
             self.current_db_path = db_path
             
             # 获取原始文件名
-            original_filename = os.path.basename(file_path)
+            original_filename = os.path.basename(csv_file_path)
             
             # 添加到对话表列表
             self.add_table_to_conversation(table_name, original_filename, list(df.columns), rows_count)
             
             print(f"✅ 导入完成，共导入 {rows_count} 行数据")
             
-            # 生成处理报告
-            processing_report = None
-            if cleaning_log:
-                processing_report = self.data_processor.generate_processing_report(quality_report, cleaning_log)
-            
-            return {
+            result = {
                 "success": True,
                 "message": f"成功导入 {rows_count} 行数据到表 '{table_name}'",
-                "rows_imported": rows_count,
+                "rows_imported": int(rows_count),
                 "columns": list(df.columns),
                 "table_name": table_name,
                 "total_tables": len(self.conversation_tables),
-                "file_format": file_format,
-                "quality_report": quality_report,
-                "cleaning_log": cleaning_log,
-                "processing_report": processing_report
+                "file_format": ".csv"
             }
+            
+            return convert_to_json_serializable(result)
             
         except Exception as e:
             print(f"❌ 导入失败: {str(e)}")
             return {"success": False, "message": f"导入失败: {str(e)}"}
-    
-    def import_csv_to_sqlite(self, csv_file_path, table_name, db_path="analysis_db.db"):
-        """保持向后兼容性的CSV导入方法"""
-        return self.import_file_to_sqlite(csv_file_path, table_name, db_path)
     
     def _clean_column_name(self, col_name):
         """清理列名"""
@@ -268,7 +306,7 @@ class DatabaseAnalyzer:
         cleaned = re.sub(r'_+', '_', cleaned)
         cleaned = cleaned.strip('_')
         return cleaned or 'unnamed_column'
-    
+
     def get_table_schema(self):
         """获取数据库中所有表的结构信息"""
         if not self.current_db_path:
@@ -296,14 +334,14 @@ class DatabaseAnalyzer:
                 table_name = table_row[0]
                 
                 # 获取表结构
-                schema_info = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+                schema_info = cursor.execute(f"PRAGMA table_info(`{table_name}`)").fetchall()
                 
                 # 获取样本数据
-                sample_data = cursor.execute(f"SELECT * FROM {table_name} LIMIT 3").fetchall()
+                sample_data = cursor.execute(f"SELECT * FROM `{table_name}` LIMIT 3").fetchall()
                 column_names = [description[0] for description in cursor.description]
                 
                 # 获取行数
-                row_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                row_count = cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`").fetchone()[0]
                 
                 # 从conversation_tables中获取更多信息
                 table_meta = None
@@ -338,7 +376,7 @@ class DatabaseAnalyzer:
             
         except Exception as e:
             return f"获取表结构失败: {str(e)}"
-    
+
     def clear_conversation_tables(self):
         """清空当前对话的表列表（新对话时调用）"""
         self.conversation_tables = []
@@ -372,11 +410,11 @@ class DatabaseAnalyzer:
                 table_name = table_row[0]
                 
                 # 获取表信息
-                cursor.execute(f"PRAGMA table_info({table_name})")
+                cursor.execute(f"PRAGMA table_info(`{table_name}`)")
                 columns_info = cursor.fetchall()
                 columns = [col[1] for col in columns_info]
                 
-                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
                 row_count = cursor.fetchone()[0]
                 
                 # 尝试从表名推断原始文件名
@@ -430,89 +468,129 @@ class DatabaseAnalyzer:
                 columns = [description[0] for description in cursor.description]
                 
                 result_data = {
+                    "success": True,
                     "columns": columns,
                     "data": results,
                     "row_count": len(results),
-                    "sql_executed": sql,
                     "execution_time": execution_time,
-                    "query_type": "SELECT",
-                    "data_preview": results[:5] if results else [],
-                    "available_tables": [table["table_name"] for table in self.conversation_tables]
+                    "sql": sql
                 }
-                
-                conn.close()
-                return result_data
             else:
                 conn.commit()
-                conn.close()
-                return {
-                    "message": "查询执行成功", 
-                    "sql_executed": sql, 
+                result_data = {
+                    "success": True,
+                    "message": f"SQL执行成功，影响行数: {cursor.rowcount}",
                     "execution_time": execution_time,
-                    "query_type": "NON_SELECT",
-                    "available_tables": [table["table_name"] for table in self.conversation_tables]
+                    "sql": sql
                 }
-                
+            
+            conn.close()
+            return result_data
+            
         except Exception as e:
             return {
-                "error": f"查询执行失败: {str(e)}", 
-                "sql_attempted": sql,
-                "execution_time": 0,
-                "query_type": "ERROR",
-                "available_tables": [table["table_name"] for table in self.conversation_tables]
+                "success": False,
+                "error": str(e),
+                "sql": sql
             }
     
     def execute_tool(self, tool_name, tool_input):
         """执行工具调用"""
+        if tool_name == "query_database":
+            return self.query_database(tool_input["sql"])
+        elif tool_name == "get_table_info":
+            return self.get_table_schema()
+        else:
+            return {"error": f"未知工具: {tool_name}"}
+    
+    def _clear_analysis_db(self, db_path):
+        """清空分析数据库（新对话时调用）"""
         try:
-            if tool_name == "query_database":
-                sql = tool_input.get("sql", "")
-                if not sql:
-                    return {"error": "SQL参数为空", "query_type": "ERROR"}
-                # 危险SQL检测（修正版）
-                sql_lower = sql.lower().replace('\n', ' ').strip()
-                # 检查SELECT * FROM
-                if re.search(r"select\s+\*\s+from", sql_lower):
-                    # 如果没有LIMIT则危险
-                    if "limit" not in sql_lower:
-                        return {
-                            "error": f"⚠️ 检测到你的SQL命令为: {sql}\n该命令会返回大量数据，极易导致token超限和系统崩溃。请改用统计、采样或加LIMIT的方式查询。",
-                            "query_type": "DANGEROUS_SQL"
-                        }
-                    # 有LIMIT但limit值过大也危险
-                    m = re.search(r"limit\s+(\d+)", sql_lower)
-                    if m and int(m.group(1)) > 100:
-                        return {
-                            "error": f"⚠️ 检测到你的SQL命令为: {sql}\nLIMIT值过大，极易导致token超限和系统崩溃。建议LIMIT不超过100。",
-                            "query_type": "DANGEROUS_SQL"
-                        }
-                # 其它危险模式
-                dangerous_patterns = [
-                    r"into\s+outfile",  # 导出
-                    r"copy.+to",  # COPY TO
-                    r"union",  # UNION
-                ]
-                for pattern in dangerous_patterns:
-                    if re.search(pattern, sql_lower):
-                        return {
-                            "error": f"⚠️ 检测到你的SQL命令为: {sql}\n该命令存在高风险操作，已被拦截。",
-                            "query_type": "DANGEROUS_SQL"
-                        }
-                return self.query_database(sql)
+            if os.path.exists(db_path):
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                
+                # 获取所有用户创建的表
+                cursor.execute("""
+                    SELECT name FROM sqlite_master 
+                    WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_db_info'
+                """)
+                tables = cursor.fetchall()
+                
+                # 删除所有用户表
+                for table in tables:
+                    cursor.execute(f"DROP TABLE IF EXISTS `{table[0]}`")
+                    print(f"🗑️ 删除表: {table[0]}")
+                
+                conn.commit()
+                conn.close()
+                print(f"🧹 已清空数据库: {db_path}")
+                
+        except Exception as e:
+            print(f"⚠️ 清空数据库失败: {e}")
+    
+    def analyze_with_claude(self, query, conversation_id=None):
+        """使用Claude进行数据分析"""
+        try:
+            # 构建系统提示词
+            system_prompt = f"""你是一个专业的数据分析师，专门帮助用户分析SQLite数据库中的数据。
+
+当前数据库信息：
+{self.get_conversation_tables_summary()}
+
+你有以下工具可以使用：
+1. query_database: 执行SQL查询获取数据
+2. get_table_info: 获取表结构信息
+
+请根据用户的问题，使用合适的工具进行数据分析，并提供清晰、准确的分析结果。
+支持多表查询，可以使用JOIN、UNION等SQL操作进行跨表分析。
+
+注意：
+- 在SQL查询中使用反引号包围表名，如 `table_name`
+- 提供具体的数据洞察和建议
+- 如果需要多个查询，请分步骤进行
+- 确保查询结果的准确性和完整性
+"""
             
-            elif tool_name == "get_table_info":
-                result = self.get_table_schema()
-                return {
-                    "table_info": result,
-                    "query_type": "TABLE_INFO",
-                    "execution_time": 0.001
+            # 构建消息
+            messages = [
+                {
+                    "role": "user",
+                    "content": query
                 }
+            ]
             
-            else:
-                return {"error": f"未知工具: {tool_name}", "query_type": "ERROR"}
+            # 调用Claude API
+            response = self.client.messages.create(
+                model=self.model_name,
+                max_tokens=4000,
+                temperature=0.1,
+                system=system_prompt,
+                messages=messages,
+                tools=self.tools
+            )
+            
+            # 处理响应
+            result = {
+                "response": response.content[0].text if response.content else "",
+                "tool_calls": [],
+                "conversation_id": conversation_id
+            }
+            
+            # 处理工具调用
+            if hasattr(response, 'tool_calls') and response.tool_calls:
+                for tool_call in response.tool_calls:
+                    tool_result = self.execute_tool(tool_call.name, tool_call.input)
+                    result["tool_calls"].append({
+                        "tool": tool_call.name,
+                        "input": tool_call.input,
+                        "result": tool_result
+                    })
+            
+            return result
+            
         except Exception as e:
             return {
-                "error": f"工具执行错误: {str(e)}",
-                "query_type": "ERROR",
-                "execution_time": 0
+                "error": f"分析失败: {str(e)}",
+                "conversation_id": conversation_id
             }

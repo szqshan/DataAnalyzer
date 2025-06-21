@@ -82,9 +82,14 @@
     <div>
         <h2>5. CSV文件上传</h2>
         <input type="file" id="csvFile" accept=".csv"><br><br>
-        <label>表名: <input type="text" id="tableName" value="data_table" placeholder="表名"></label><br><br>
         <button onclick="uploadCSV()">上传CSV文件</button>
         <pre id="uploadResult"></pre>
+        
+        <h3>当前会话中的数据表</h3>
+        <button onclick="refreshTablesList()" id="refreshTablesBtn">🔄 刷新表列表</button>
+        <div id="tablesList" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+            点击"刷新表列表"查看当前会话中的数据表
+        </div>
     </div>
 
     <hr>
@@ -355,7 +360,6 @@
             if (!checkApiKey()) return;
             
             const fileInput = document.getElementById('csvFile');
-            const tableName = document.getElementById('tableName').value || 'data_table';
             
             if (!fileInput.files.length) {
                 alert('请选择CSV文件');
@@ -365,7 +369,6 @@
             const file = fileInput.files[0];
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('tableName', tableName);
             formData.append('userId', currentUserId);
             formData.append('username', currentUsername);
 
@@ -374,7 +377,7 @@
                 
                 const uploadHeaders = {
                     'X-User-ID': currentUserId,
-                    'X-Username': encodeURIComponent(currentUsername)
+                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername)))
                 };
                 
                 // 添加API密钥到请求头
@@ -393,6 +396,8 @@
                 
                 if (data.success) {
                     log(`CSV上传成功: ${data.data.rows_imported} 行数据已导入`);
+                    // 上传成功后自动刷新表列表
+                    refreshTablesList();
                 } else {
                     log('CSV上传失败: ' + data.message);
                 }
@@ -400,6 +405,79 @@
                 log('CSV上传出错: ' + error.message);
                 document.getElementById('uploadResult').textContent = 'Error: ' + error.message;
             }
+        }
+
+        // 刷新表列表
+        async function refreshTablesList() {
+            if (!checkApiKey()) return;
+            
+            try {
+                log('正在获取表列表...');
+                
+                const headers = {
+                    'X-User-ID': currentUserId,
+                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername)))
+                };
+                
+                if (currentApiKey) {
+                    headers['X-API-Key'] = currentApiKey;
+                }
+                
+                const response = await fetch('http://localhost:5000/api/tables-info', {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayTablesList(data.data);
+                    log(`✅ 获取表列表成功，共 ${data.data.total_tables} 个表`);
+                } else {
+                    log('❌ 获取表列表失败: ' + data.message);
+                    document.getElementById('tablesList').innerHTML = '<p style="color: red;">获取表列表失败: ' + data.message + '</p>';
+                }
+            } catch (error) {
+                log('❌ 获取表列表出错: ' + error.message);
+                document.getElementById('tablesList').innerHTML = '<p style="color: red;">获取表列表出错: ' + error.message + '</p>';
+            }
+        }
+
+        // 显示表列表
+        function displayTablesList(data) {
+            const tablesDiv = document.getElementById('tablesList');
+            
+            // 添加调试信息
+            console.log('displayTablesList 接收到的数据:', data);
+            console.log('data.tables 类型:', typeof data.tables);
+            console.log('data.tables 是否为数组:', Array.isArray(data.tables));
+            
+            if (!data.tables || !Array.isArray(data.tables) || data.tables.length === 0) {
+                tablesDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">当前会话中没有数据表<br>请先上传文件</p>';
+                return;
+            }
+            
+            let html = '<div>';
+            html += `<p><strong>当前会话中共有 ${data.tables.length} 个数据表:</strong></p>`;
+            
+            data.tables.forEach((table, index) => {
+                html += `
+                    <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 6px; background: #fff;">
+                        <h4 style="margin: 0 0 8px 0; color: #333;">
+                            📊 表 ${index + 1}: ${table.table_name}
+                        </h4>
+                        <div style="margin-left: 20px; color: #666; font-size: 14px;">
+                            <p><strong>原始文件名:</strong> ${table.original_filename}</p>
+                            <p><strong>数据规模:</strong> ${table.row_count} 行 × ${table.column_count} 列</p>
+                            <p><strong>创建时间:</strong> ${new Date(table.created_at).toLocaleString()}</p>
+                            <p><strong>列名:</strong> ${table.columns.join(', ')}</p>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            tablesDiv.innerHTML = html;
         }
 
         // 配置 marked

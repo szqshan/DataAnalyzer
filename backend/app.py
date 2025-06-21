@@ -171,13 +171,12 @@ def upload_csv(user_data):
         if file.filename == '':
             return jsonify({"success": False, "message": "未选择文件"}), 400
         
-        # 检查文件格式
-        supported_formats = ['.csv', '.xlsx', '.xls', '.json', '.tsv', '.txt']
+        # 检查文件格式 - 只支持CSV
         file_ext = os.path.splitext(file.filename.lower())[1]
-        if file_ext not in supported_formats:
+        if file_ext != '.csv':
             return jsonify({
                 "success": False, 
-                "message": f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(supported_formats)}"
+                "message": f"只支持CSV文件格式，当前文件格式: {file_ext}"
             }), 400
         
         # 获取用户路径
@@ -201,20 +200,8 @@ def upload_csv(user_data):
         table_name = analyzer._generate_table_name(filename)
         print(f"📋 生成表名: {table_name} (来源文件: {filename})")
         
-        # 获取处理选项
-        processing_options = {
-            "enable_cleaning": True,  # 默认启用数据清洗
-            "cleaning_options": {
-                "remove_duplicates": True,
-                "handle_missing": "auto",
-                "fix_data_types": True,
-                "standardize_text": True,
-                "missing_threshold": 80  # 缺失值超过80%才删除列
-            }
-        }
-        
-        # 导入数据库（使用新的多格式支持方法）
-        result = analyzer.import_file_to_sqlite(str(file_path), table_name, user_db_path, processing_options)
+        # 导入数据库
+        result = analyzer.import_csv_to_sqlite(str(file_path), table_name, user_db_path)
         
         if result["success"]:
             # 清理临时文件
@@ -233,10 +220,7 @@ def upload_csv(user_data):
                     "columns": result.get("columns", []),
                     "table_name": table_name,
                     "db_path": user_db_path,
-                    "file_format": result.get("file_format", "unknown"),
-                    "quality_report": result.get("quality_report", {}),
-                    "cleaning_log": result.get("cleaning_log", {}),
-                    "processing_report": result.get("processing_report", {}),
+                    "file_format": result.get("file_format", ".csv"),
                     "user_info": user_data
                 }
             })
@@ -248,100 +232,6 @@ def upload_csv(user_data):
         return jsonify({
             "success": False,
             "message": f"上传失败: {str(e)}",
-            "user_info": user_data
-        }), 500
-
-@app.route('/api/preview-file', methods=['POST'])
-@require_user
-def preview_file(user_data):
-    """预览文件内容和数据质量评估（不导入数据库）"""
-    try:
-        print(f"🔍 用户 {user_data['username']} 正在预览文件...")
-        
-        api_key = user_data.get('api_key')
-        if not api_key:
-            return jsonify({"success": False, "message": "未提供API密钥"}), 400
-        
-        analyzer = get_user_analyzer(user_data, api_key)
-        
-        # 检查文件
-        if 'file' not in request.files:
-            return jsonify({"success": False, "message": "未找到文件"}), 400
-        
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({"success": False, "message": "未选择文件"}), 400
-        
-        # 检查文件格式
-        supported_formats = ['.csv', '.xlsx', '.xls', '.json', '.tsv', '.txt']
-        file_ext = os.path.splitext(file.filename.lower())[1]
-        if file_ext not in supported_formats:
-            return jsonify({
-                "success": False, 
-                "message": f"不支持的文件格式: {file_ext}。支持的格式: {', '.join(supported_formats)}"
-            }), 400
-        
-        # 获取用户路径
-        user_paths = user_manager.get_user_paths(user_data['user_id'])
-        user_uploads_dir = user_paths['uploads_dir']
-        
-        # 确保上传目录存在
-        if not os.path.exists(user_uploads_dir):
-            os.makedirs(user_uploads_dir)
-        
-        # 保存临时文件
-        filename = secure_filename(file.filename)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"preview_{timestamp}_{filename}"
-        file_path = user_uploads_dir / safe_filename
-        
-        file.save(str(file_path))
-        
-        try:
-            # 读取文件
-            print("📖 正在读取文件...")
-            df = analyzer.data_processor.read_file(str(file_path))
-            
-            # 数据质量评估
-            print("🔍 开始数据质量评估...")
-            quality_report = analyzer.data_processor.assess_data_quality(df)
-            
-            # 生成预览数据
-            preview_data = analyzer.data_processor.preview_data(df)
-            
-            # 清理临时文件
-            try:
-                os.remove(str(file_path))
-            except:
-                pass
-            
-            print(f"✅ 文件预览完成")
-            
-            return jsonify({
-                "success": True,
-                "message": "文件预览成功",
-                "data": {
-                    "filename": filename,
-                    "file_format": file_ext,
-                    "quality_report": quality_report,
-                    "preview_data": preview_data,
-                    "user_info": user_data
-                }
-            })
-            
-        except Exception as e:
-            # 清理临时文件
-            try:
-                os.remove(str(file_path))
-            except:
-                pass
-            raise e
-            
-    except Exception as e:
-        print(f"❌ 文件预览失败: {str(e)}")
-        return jsonify({
-            "success": False,
-            "message": f"文件预览失败: {str(e)}",
             "user_info": user_data
         }), 500
 
