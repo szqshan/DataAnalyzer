@@ -55,15 +55,16 @@ def extract_query_from_data(data):
     else:
         return str(query_raw).strip()
 
-def get_user_analyzer(user_data):
+def get_user_analyzer(user_data, api_key):
     """获取或创建用户专属的分析器实例"""
     user_id = user_data['user_id']
     
-    if user_id not in user_analyzers:
-        # 获取API密钥
-        api_key = os.getenv('ANTHROPIC_API_KEY')
+    # 为每个用户+API Key组合创建唯一标识
+    analyzer_key = f"{user_id}_{hash(api_key) % 10000}"
+    
+    if analyzer_key not in user_analyzers:
         if not api_key:
-            raise ValueError("未找到 ANTHROPIC_API_KEY 环境变量")
+            raise ValueError("未提供用户API密钥")
         
         # 获取API基础URL
         base_url = os.getenv('ANTHROPIC_BASE_URL')
@@ -79,11 +80,11 @@ def get_user_analyzer(user_data):
         analyzer.current_table_name = "data_table"  # 简化：固定表名
         
         # 缓存分析器
-        user_analyzers[user_id] = analyzer
+        user_analyzers[analyzer_key] = analyzer
         
         print(f"✅ 用户 {user_data['username']} 已连接")
     
-    return user_analyzers[user_id]
+    return user_analyzers[analyzer_key]
 
 def get_user_history_manager(user_data):
     """获取或创建用户专属的历史记录管理器实例"""
@@ -108,7 +109,16 @@ def get_user_history_manager(user_data):
 def get_status(user_data):
     """获取系统状态"""
     try:
-        analyzer = get_user_analyzer(user_data)
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({
+                "system_ready": False,
+                "error": "未提供API密钥",
+                "database_connected": False,
+                "user_info": user_data
+            }), 400
+        
+        analyzer = get_user_analyzer(user_data, api_key)
         
         # 获取记录数
         record_count = 0
@@ -147,7 +157,11 @@ def upload_csv(user_data):
     try:
         print(f"📤 用户 {user_data['username']} 正在上传文件...")
         
-        analyzer = get_user_analyzer(user_data)
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({"success": False, "message": "未提供API密钥"}), 400
+        
+        analyzer = get_user_analyzer(user_data, api_key)
         
         # 检查文件
         if 'file' not in request.files:
@@ -230,7 +244,11 @@ def analyze_data_stream(user_data):
         
         print(f"🔍 用户 {user_data['username']} 开始分析: {query}")
         
-        analyzer = get_user_analyzer(user_data)
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({"success": False, "message": "未提供API密钥"}), 400
+        
+        analyzer = get_user_analyzer(user_data, api_key)
         history_manager = get_user_history_manager(user_data)
         
         if not analyzer.current_db_path:
@@ -477,7 +495,7 @@ def analyze_data_stream(user_data):
                 'Connection': 'keep-alive',
                 'X-Accel-Buffering': 'no',
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': 'Cache-Control, Content-Type, X-User-ID, X-Username',
+                'Access-Control-Allow-Headers': 'Cache-Control, Content-Type, X-User-ID, X-Username, X-API-Key',
                 'Access-Control-Allow-Methods': 'POST, OPTIONS'
             }
         )

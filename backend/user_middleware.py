@@ -22,10 +22,12 @@ class UserManager:
         """从请求中提取用户信息"""
         user_id = None
         username = None
+        api_key = None
         
         # 策略1: 从请求头获取（优先级最高）
         user_id = request.headers.get('X-User-ID')
         username = request.headers.get('X-Username')
+        api_key = request.headers.get('X-API-Key')
         
         # URL解码用户名
         if username:
@@ -41,6 +43,8 @@ class UserManager:
             user_id = request.args.get('userId')
             if not username:
                 username = request.args.get('username', '')
+            if not api_key:
+                api_key = request.args.get('apiKey')
         
         # 策略3: 从请求体获取（用于JSON和FormData）
         if not user_id:
@@ -52,12 +56,16 @@ class UserManager:
                         user_id = json_data.get('userId')
                         if not username:
                             username = json_data.get('username', '')
+                        if not api_key:
+                            api_key = json_data.get('apiKey')
                 
                 # 检查表单数据（用于文件上传）
                 elif request.form:
                     user_id = request.form.get('userId')
                     if not username:
                         username = request.form.get('username', '')
+                    if not api_key:
+                        api_key = request.form.get('apiKey')
             except:
                 pass
         
@@ -84,7 +92,8 @@ class UserManager:
         user_info = {
             'user_id': str(user_id),
             'username': username,
-            'is_guest': str(user_id).startswith('guest_')
+            'is_guest': str(user_id).startswith('guest_'),
+            'api_key': api_key
         }
         
         return user_info

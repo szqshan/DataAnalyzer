@@ -13,8 +13,11 @@
         <h2>1. 用户信息设置</h2>
         <label>用户ID: <input type="text" id="userId" value="test_user_001" placeholder="用户ID"></label><br><br>
         <label>用户名: <input type="text" id="username" value="TestUser" placeholder="用户名"></label><br><br>
+        <label>API密钥: <input type="password" id="apiKey" value="" placeholder="输入您的API密钥 (如: sk-ant-api...)" style="width: 400px;"></label><br>
+        <small style="color: #666; margin-left: 80px;">💡 每个用户使用独立的API密钥，确保数据隔离和成本控制</small><br><br>
         <button onclick="setUserInfo()">设置用户信息</button>
         <div id="currentUser">当前用户: 未设置</div>
+        <div id="apiKeyStatus" style="margin-top: 10px; color: #666;">API密钥状态: 未设置</div>
     </div>
 
     <hr>
@@ -228,6 +231,7 @@
         let currentReader = null;
         let currentUserId = 'test_user_001';
         let currentUsername = 'TestUser';
+        let currentApiKey = '';
         let latestReportHtml = '';
         let currentConversationId = null;
 
@@ -235,17 +239,47 @@
         function setUserInfo() {
             currentUserId = document.getElementById('userId').value || 'test_user_001';
             currentUsername = document.getElementById('username').value || 'TestUser';
+            currentApiKey = document.getElementById('apiKey').value || '';
+            
             document.getElementById('currentUser').textContent = `当前用户: ${currentUsername} (${currentUserId})`;
+            
+            // 更新API密钥状态显示
+            const apiKeyStatus = document.getElementById('apiKeyStatus');
+            if (currentApiKey) {
+                const maskedKey = currentApiKey.substring(0, 8) + '***' + currentApiKey.substring(currentApiKey.length - 4);
+                apiKeyStatus.textContent = `API密钥状态: 已设置 (${maskedKey})`;
+                apiKeyStatus.style.color = '#4CAF50';
+            } else {
+                apiKeyStatus.textContent = 'API密钥状态: 未设置';
+                apiKeyStatus.style.color = '#f44336';
+            }
+            
             log('用户信息已设置: ' + currentUsername);
         }
 
         // 获取请求头
         function getHeaders() {
-            return {
+            const headers = {
                 'Content-Type': 'application/json',
                 'X-User-ID': currentUserId,
                 'X-Username': encodeURIComponent(currentUsername)
             };
+            
+            // 只有在API密钥存在时才添加
+            if (currentApiKey) {
+                headers['X-API-Key'] = currentApiKey;
+            }
+            
+            return headers;
+        }
+
+        // 检查API密钥是否已设置
+        function checkApiKey() {
+            if (!currentApiKey) {
+                alert('请先设置API密钥！');
+                return false;
+            }
+            return true;
         }
 
         // 日志记录函数
@@ -299,6 +333,8 @@
 
         // 2. 获取系统状态
         async function getStatus() {
+            if (!checkApiKey()) return;
+            
             try {
                 log('正在获取系统状态...');
                 const response = await fetch('http://localhost:5000/api/status', {
@@ -316,6 +352,8 @@
 
         // 3. 上传CSV文件
         async function uploadCSV() {
+            if (!checkApiKey()) return;
+            
             const fileInput = document.getElementById('csvFile');
             const tableName = document.getElementById('tableName').value || 'data_table';
             
@@ -334,12 +372,19 @@
             try {
                 log('正在上传CSV文件: ' + file.name);
                 
+                const uploadHeaders = {
+                    'X-User-ID': currentUserId,
+                    'X-Username': encodeURIComponent(currentUsername)
+                };
+                
+                // 添加API密钥到请求头
+                if (currentApiKey) {
+                    uploadHeaders['X-API-Key'] = currentApiKey;
+                }
+                
                 const response = await fetch('http://localhost:5000/api/upload', {
                     method: 'POST',
-                    headers: {
-                        'X-User-ID': currentUserId,
-                        'X-Username': encodeURIComponent(currentUsername)
-                    },
+                    headers: uploadHeaders,
                     body: formData
                 });
 
@@ -438,6 +483,8 @@
 
         // 4. 开始多轮对话（包含富文本）
         async function startMultiTurnChat() {
+            if (!checkApiKey()) return;
+            
             const query = document.getElementById('analysisQuery').value.trim();
             if (!query) {
                 alert('请输入您的问题或需求');
@@ -468,15 +515,22 @@
 
             try {
                 // 🔥 关键修复：使用正确的流式请求方式
+                const streamHeaders = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'text/event-stream',
+                    'Cache-Control': 'no-cache',
+                    'X-User-ID': currentUserId,
+                    'X-Username': encodeURIComponent(currentUsername)
+                };
+                
+                // 添加API密钥到请求头
+                if (currentApiKey) {
+                    streamHeaders['X-API-Key'] = currentApiKey;
+                }
+                
                 const response = await fetch('http://localhost:5000/api/analyze-stream', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'text/event-stream',
-                        'Cache-Control': 'no-cache',
-                        'X-User-ID': currentUserId,
-                        'X-Username': encodeURIComponent(currentUsername)
-                    },
+                    headers: streamHeaders,
                                     body: JSON.stringify({ 
                     query: query,
                     userId: currentUserId,

@@ -50,14 +50,19 @@ pip install -r requirements.txt
 创建 `.env` 文件并添加以下配置：
 
 ```env
-# 必需配置
-ANTHROPIC_API_KEY=sk-your-api-key-here
+# 可选配置（v1.1版本已不再需要全局API Key）
+# ANTHROPIC_API_KEY=sk-your-api-key-here  # 已废弃，现在每个用户使用独立API Key
 
-# 可选配置
+# 服务器配置
 ANTHROPIC_BASE_URL=https://api.anthropic.com  # 可选，自定义API地址
 HOST=0.0.0.0                                  # 服务器主机地址
 PORT=5000                                     # 服务器端口
 ```
+
+**🔑 重要变更（v1.1）：**
+- 不再使用全局共享的API Key
+- 每个用户需要在前端界面中输入自己的API Key
+- 确保数据隔离和成本控制
 
 ### 4. 启动系统
 
@@ -80,17 +85,18 @@ python start.py
 
 ### 用户认证
 
-所有API接口都需要用户身份识别，支持以下方式：
+所有API接口都需要用户身份识别和API密钥，支持以下方式：
 
 #### 1. 请求头方式（推荐）
 ```http
 X-User-ID: your_user_id
 X-Username: your_username
+X-API-Key: sk-ant-api-your-api-key-here
 ```
 
 #### 2. URL参数方式
 ```http
-GET /api/status?userId=your_user_id&username=your_username
+GET /api/status?userId=your_user_id&username=your_username&apiKey=sk-ant-api-your-key
 ```
 
 #### 3. 请求体方式
@@ -98,9 +104,16 @@ GET /api/status?userId=your_user_id&username=your_username
 {
   "userId": "your_user_id",
   "username": "your_username",
+  "apiKey": "sk-ant-api-your-api-key-here",
   "query": "your_query"
 }
 ```
+
+**🔐 API Key 安全说明：**
+- 每个用户使用独立的API Key，确保数据隔离
+- API Key通过HTTPS安全传输
+- 前端不会存储API Key，每次使用时需要重新输入
+- 建议为每个用户创建专属的API Key
 
 ### 系统状态接口
 
