@@ -309,6 +309,35 @@ def preview_file(user_data):
             # 生成预览数据
             preview_data = analyzer.data_processor.preview_data(df)
             
+            # 构建前端期望的数据结构
+            response_data = {
+                "file_info": {
+                    "format": file_ext.upper().replace('.', ''),
+                    "size": os.path.getsize(str(file_path)) if os.path.exists(str(file_path)) else 0,
+                    "filename": filename
+                },
+                "basic_stats": {
+                    "total_rows": df.shape[0],
+                    "total_columns": df.shape[1]
+                },
+                "quality_score": quality_report.get("overall_score", 0),
+                "quality_issues": quality_report.get("recommendations", []),
+                "column_info": [],
+                "sample_data": preview_data.get("head", [])[:5]  # 前5行数据
+            }
+            
+            # 构建列信息
+            for col in df.columns:
+                col_info = {
+                    "column": col,
+                    "dtype": str(df[col].dtype),
+                    "missing_count": int(df[col].isnull().sum()),
+                    "missing_percentage": round(df[col].isnull().sum() / len(df) * 100, 1),
+                    "unique_count": int(df[col].nunique()),
+                    "sample_values": df[col].dropna().unique()[:3].tolist()
+                }
+                response_data["column_info"].append(col_info)
+            
             # 清理临时文件
             try:
                 os.remove(str(file_path))
@@ -320,13 +349,7 @@ def preview_file(user_data):
             return jsonify({
                 "success": True,
                 "message": "文件预览成功",
-                "data": {
-                    "filename": filename,
-                    "file_format": file_ext,
-                    "quality_report": quality_report,
-                    "preview_data": preview_data,
-                    "user_info": user_data
-                }
+                "data": response_data
             })
             
         except Exception as e:
@@ -884,6 +907,36 @@ def get_conversation_stats(user_data):
         return jsonify({
             'success': False,
             'message': f'获取对话统计失败: {str(e)}'
+        }), 500
+
+@app.route('/api/tables-info', methods=['GET'])
+@require_user
+def get_tables_info(user_data):
+    """获取当前会话中所有表的信息"""
+    try:
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({"success": False, "message": "未提供API密钥"}), 400
+        
+        analyzer = get_user_analyzer(user_data, api_key)
+        
+        # 获取表详细信息
+        tables_info = analyzer.get_conversation_tables_info()
+        
+        return jsonify({
+            "success": True,
+            "data": {
+                "tables": tables_info,
+                "total_tables": len(tables_info)
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ 获取表信息失败: {str(e)}")
+        traceback.print_exc()
+        return jsonify({
+            "success": False,
+            "message": f"获取表信息失败: {str(e)}"
         }), 500
 
 @app.route('/api/health', methods=['GET'])

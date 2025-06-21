@@ -27,10 +27,20 @@ class UserManager:
         # 策略1: 从请求头获取（优先级最高）
         user_id = request.headers.get('X-User-ID')
         username = request.headers.get('X-Username')
+        username_b64 = request.headers.get('X-Username-B64')
         api_key = request.headers.get('X-API-Key')
         
-        # URL解码用户名
-        if username:
+        # 处理Base64编码的用户名（优先使用）
+        if username_b64:
+            try:
+                import base64
+                username = base64.b64decode(username_b64).decode('utf-8')
+                username = self._safe_username(username)
+            except:
+                username = None
+        
+        # URL解码用户名（兼容旧版本）
+        elif username:
             try:
                 if '%' in username:
                     username = urllib.parse.unquote(username)

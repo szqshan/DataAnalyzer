@@ -8,6 +8,25 @@ from typing import Dict, List, Tuple, Any, Optional
 import warnings
 warnings.filterwarnings('ignore')
 
+def convert_to_json_serializable(obj):
+    """将包含numpy类型的对象转换为JSON可序列化的格式"""
+    if isinstance(obj, dict):
+        return {key: convert_to_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32, np.float16)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif pd.isna(obj):
+        return None
+    else:
+        return obj
+
 class DataProcessor:
     """数据处理和清洗模块"""
     
@@ -188,7 +207,7 @@ class DataProcessor:
         self.quality_report = quality_report
         print(f"✅ 数据质量评估完成，总体评分: {quality_report['overall_score']}/100")
         
-        return quality_report
+        return convert_to_json_serializable(quality_report)
     
     def _check_format_consistency(self, series: pd.Series, col_name: str) -> Dict[str, Any]:
         """检查格式一致性"""
@@ -405,7 +424,7 @@ class DataProcessor:
         self.cleaning_log = cleaning_log
         print(f"✅ 数据清洗完成: {df.shape} → {cleaned_df.shape}")
         
-        return cleaned_df, cleaning_log
+        return cleaned_df, convert_to_json_serializable(cleaning_log)
     
     def _clean_column_name(self, col_name: str) -> str:
         """清理列名"""

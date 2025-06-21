@@ -9,10 +9,30 @@ from datetime import datetime
 import json
 import re
 from typing import Dict, List, Optional, Any
+import numpy as np
 try:
     from .data_processor import DataProcessor
 except ImportError:
     from data_processor import DataProcessor
+
+def convert_to_json_serializable(obj):
+    """将包含numpy类型的对象转换为JSON可序列化的格式"""
+    if isinstance(obj, dict):
+        return {key: convert_to_json_serializable(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, (np.int64, np.int32, np.int16, np.int8)):
+        return int(obj)
+    elif isinstance(obj, (np.float64, np.float32, np.float16)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif pd.isna(obj):
+        return None
+    else:
+        return obj
 
 class DatabaseAnalyzer:
     """P1精简版数据库分析器类 - 专注核心数据处理功能，支持多表管理"""
@@ -86,13 +106,30 @@ class DatabaseAnalyzer:
         if not cleaned_name or len(cleaned_name) < 2:
             cleaned_name = "data_table"
         
+        # 确保表名不以数字开头（SQLite要求）
+        if cleaned_name and cleaned_name[0].isdigit():
+            cleaned_name = f"table_{cleaned_name}"
+        
+        # 如果清理后的名称仍然为空或无效，使用默认名称
+        if not cleaned_name or not cleaned_name.replace('_', '').isalnum():
+            cleaned_name = "data_table"
+        
         # 添加时间戳确保唯一性
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         table_name = f"{cleaned_name}_{timestamp}"
         
         # 确保表名不超过SQLite限制（通常为64字符）
         if len(table_name) > 60:
-            table_name = f"{cleaned_name[:30]}_{timestamp}"
+            # 截取前面部分，但保证不以数字开头
+            truncated_name = cleaned_name[:30]
+            if truncated_name and truncated_name[0].isdigit():
+                truncated_name = f"t_{truncated_name[1:]}"
+            table_name = f"{truncated_name}_{timestamp}"
+        
+        # 最后检查：确保表名符合SQLite标识符规范
+        # SQLite标识符必须以字母或下划线开头
+        if table_name and not (table_name[0].isalpha() or table_name[0] == '_'):
+            table_name = f"table_{table_name}"
         
         return table_name
     
@@ -153,6 +190,31 @@ class DatabaseAnalyzer:
             summary += f"   创建时间: {table['created_at'][:19]}\n\n"
         
         return summary
+    
+    def get_conversation_tables_info(self) -> List[Dict[str, Any]]:
+        """
+        获取当前对话中所有表的详细信息（用于API接口）
+        
+        Returns:
+            表信息数组
+        """
+        if not self.conversation_tables:
+            return []
+        
+        tables_info = []
+        for table in self.conversation_tables:
+            table_info = {
+                "table_name": table["table_name"],
+                "original_filename": table["original_filename"],
+                "row_count": table["row_count"],
+                "column_count": len(table["columns"]),
+                "columns": table["columns"],
+                "created_at": table["created_at"],
+                "description": table.get("description", f"数据表 {table['table_name']}")
+            }
+            tables_info.append(table_info)
+        
+        return convert_to_json_serializable(tables_info)
         
     def import_file_to_sqlite(self, file_path, table_name, db_path="analysis_db.db", processing_options=None):
         """从多种格式文件创建SQLite表并导入数据 - 支持多表共存和数据处理"""
@@ -208,7 +270,7 @@ class DatabaseAnalyzer:
             
             if table_exists:
                 print(f"🔄 表 {table_name} 已存在，将替换数据...")
-                cursor.execute(f"DROP TABLE IF EXISTS {table_name}")
+                cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
             else:
                 print(f"🆕 创建新表: {table_name}")
             
@@ -218,7 +280,7 @@ class DatabaseAnalyzer:
             
             # 获取导入的行数
             print("🔢 正在统计导入行数...")
-            cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+            cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
             rows_count = cursor.fetchone()[0]
             
             conn.commit()
@@ -240,18 +302,20 @@ class DatabaseAnalyzer:
             if cleaning_log:
                 processing_report = self.data_processor.generate_processing_report(quality_report, cleaning_log)
             
-            return {
+            result = {
                 "success": True,
                 "message": f"成功导入 {rows_count} 行数据到表 '{table_name}'",
-                "rows_imported": rows_count,
+                "rows_imported": int(rows_count),
                 "columns": list(df.columns),
                 "table_name": table_name,
                 "total_tables": len(self.conversation_tables),
                 "file_format": file_format,
-                "quality_report": quality_report,
-                "cleaning_log": cleaning_log,
-                "processing_report": processing_report
+                "quality_report": convert_to_json_serializable(quality_report),
+                "cleaning_log": convert_to_json_serializable(cleaning_log),
+                "processing_report": convert_to_json_serializable(processing_report)
             }
+            
+            return convert_to_json_serializable(result)
             
         except Exception as e:
             print(f"❌ 导入失败: {str(e)}")
@@ -296,14 +360,14 @@ class DatabaseAnalyzer:
                 table_name = table_row[0]
                 
                 # 获取表结构
-                schema_info = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+                schema_info = cursor.execute(f"PRAGMA table_info(`{table_name}`)").fetchall()
                 
                 # 获取样本数据
-                sample_data = cursor.execute(f"SELECT * FROM {table_name} LIMIT 3").fetchall()
+                sample_data = cursor.execute(f"SELECT * FROM `{table_name}` LIMIT 3").fetchall()
                 column_names = [description[0] for description in cursor.description]
                 
                 # 获取行数
-                row_count = cursor.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+                row_count = cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`").fetchone()[0]
                 
                 # 从conversation_tables中获取更多信息
                 table_meta = None
@@ -372,11 +436,11 @@ class DatabaseAnalyzer:
                 table_name = table_row[0]
                 
                 # 获取表信息
-                cursor.execute(f"PRAGMA table_info({table_name})")
+                cursor.execute(f"PRAGMA table_info(`{table_name}`)")
                 columns_info = cursor.fetchall()
                 columns = [col[1] for col in columns_info]
                 
-                cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+                cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
                 row_count = cursor.fetchone()[0]
                 
                 # 尝试从表名推断原始文件名

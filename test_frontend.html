@@ -78,13 +78,48 @@
 
     <hr>
 
-    <!-- 5. CSV文件上传 -->
+    <!-- 5. 多格式文件上传 -->
     <div>
-        <h2>5. CSV文件上传</h2>
-        <input type="file" id="csvFile" accept=".csv"><br><br>
-        <label>表名: <input type="text" id="tableName" value="data_table" placeholder="表名"></label><br><br>
-        <button onclick="uploadCSV()">上传CSV文件</button>
-        <pre id="uploadResult"></pre>
+        <h2>5. 多格式文件上传</h2>
+        <div style="margin-bottom: 15px;">
+            <label for="dataFile">选择文件: </label>
+            <input type="file" id="dataFile" accept=".csv,.xlsx,.xls,.json,.tsv,.txt" style="margin-bottom: 10px;"><br>
+            <small style="color: #666;">支持格式: CSV, Excel (.xlsx/.xls), JSON, TSV, TXT</small>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <h3>数据处理选项</h3>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                <label><input type="checkbox" id="handleMissing" checked> 处理缺失值</label>
+                <label><input type="checkbox" id="removeDuplicates" checked> 删除重复行</label>
+                <label><input type="checkbox" id="standardizeText" checked> 标准化文本</label>
+                <label><input type="checkbox" id="detectOutliers" checked> 检测异常值</label>
+                <label><input type="checkbox" id="optimizeTypes" checked> 优化数据类型</label>
+            </div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <button onclick="previewFile()" id="previewBtn">📊 预览文件质量</button>
+            <button onclick="uploadFile()" id="uploadBtn">📤 上传并处理文件</button>
+        </div>
+        
+        <div id="filePreview" style="display: none; margin-bottom: 15px;">
+            <h3>文件预览和质量评估</h3>
+            <div id="previewContent" style="border: 1px solid #ccc; padding: 10px; background: #f9f9f9; max-height: 400px; overflow-y: auto;"></div>
+        </div>
+        
+        <div id="uploadResult" style="margin-top: 15px;">
+            <h3>上传结果</h3>
+            <pre id="uploadResultContent" style="background:#f8f8f8; border:1px solid #ccc; padding:10px; min-height:60px; white-space: pre-wrap;"></pre>
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <h3>当前会话中的数据表</h3>
+            <button onclick="refreshTablesList()" id="refreshTablesBtn">🔄 刷新表列表</button>
+            <div id="tablesList" style="margin-top: 10px; border: 1px solid #ccc; padding: 10px; background: #f9f9f9; min-height: 100px;">
+                点击"刷新表列表"查看当前会话中的所有数据表
+            </div>
+        </div>
     </div>
 
     <hr>
@@ -257,12 +292,23 @@
             log('用户信息已设置: ' + currentUsername);
         }
 
+        // 安全编码用户名为Base64（HTTP请求头必须是ASCII字符）
+        function encodeUsernameForHeader(username) {
+            try {
+                // 将用户名转换为Base64编码，确保HTTP请求头兼容
+                return btoa(unescape(encodeURIComponent(username)));
+            } catch (e) {
+                // 如果编码失败，使用默认值
+                return btoa('user');
+            }
+        }
+
         // 获取请求头
         function getHeaders() {
             const headers = {
                 'Content-Type': 'application/json',
                 'X-User-ID': currentUserId,
-                'X-Username': encodeURIComponent(currentUsername)
+                'X-Username-B64': encodeUsernameForHeader(currentUsername)
             };
             
             // 只有在API密钥存在时才添加
@@ -350,31 +396,178 @@
             }
         }
 
-        // 3. 上传CSV文件
-        async function uploadCSV() {
+        // 3. 预览文件质量
+        async function previewFile() {
             if (!checkApiKey()) return;
             
-            const fileInput = document.getElementById('csvFile');
-            const tableName = document.getElementById('tableName').value || 'data_table';
+            const fileInput = document.getElementById('dataFile');
             
             if (!fileInput.files.length) {
-                alert('请选择CSV文件');
+                alert('请选择文件');
                 return;
             }
 
             const file = fileInput.files[0];
             const formData = new FormData();
             formData.append('file', file);
-            formData.append('tableName', tableName);
             formData.append('userId', currentUserId);
             formData.append('username', currentUsername);
 
             try {
-                log('正在上传CSV文件: ' + file.name);
+                log('正在预览文件: ' + file.name);
+                document.getElementById('previewBtn').disabled = true;
+                document.getElementById('previewBtn').textContent = '⏳ 分析中...';
                 
                 const uploadHeaders = {
                     'X-User-ID': currentUserId,
-                    'X-Username': encodeURIComponent(currentUsername)
+                    'X-Username-B64': encodeUsernameForHeader(currentUsername)
+                };
+                
+                // 添加API密钥到请求头
+                if (currentApiKey) {
+                    uploadHeaders['X-API-Key'] = currentApiKey;
+                }
+                
+                const response = await fetch('http://localhost:5000/api/preview-file', {
+                    method: 'POST',
+                    headers: uploadHeaders,
+                    body: formData
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`文件预览成功: ${file.name}`);
+                    displayFilePreview(data.data);
+                } else {
+                    log('文件预览失败: ' + data.message);
+                    alert('文件预览失败: ' + data.message);
+                }
+            } catch (error) {
+                log('文件预览出错: ' + error.message);
+                alert('文件预览出错: ' + error.message);
+            } finally {
+                document.getElementById('previewBtn').disabled = false;
+                document.getElementById('previewBtn').textContent = '📊 预览文件质量';
+            }
+        }
+
+        // 显示文件预览结果
+        function displayFilePreview(data) {
+            const previewDiv = document.getElementById('filePreview');
+            const contentDiv = document.getElementById('previewContent');
+            
+            let html = '<div style="margin-bottom: 15px;">';
+            
+            // 基本信息
+            html += '<h4>📋 文件基本信息</h4>';
+            html += `<p><strong>文件格式:</strong> ${data.file_info.format}</p>`;
+            html += `<p><strong>文件大小:</strong> ${(data.file_info.size / 1024).toFixed(2)} KB</p>`;
+            html += `<p><strong>行数:</strong> ${data.basic_stats.total_rows}</p>`;
+            html += `<p><strong>列数:</strong> ${data.basic_stats.total_columns}</p>`;
+            
+            // 质量评分
+            const score = data.quality_score;
+            const scoreColor = score >= 80 ? 'green' : score >= 60 ? 'orange' : 'red';
+            html += `<h4>⭐ 数据质量评分: <span style="color: ${scoreColor}; font-size: 1.2em;">${score}/100</span></h4>`;
+            
+            // 质量问题
+            if (data.quality_issues && data.quality_issues.length > 0) {
+                html += '<h4>⚠️ 发现的质量问题</h4>';
+                html += '<ul>';
+                data.quality_issues.forEach(issue => {
+                    html += `<li style="color: orange;">${issue}</li>`;
+                });
+                html += '</ul>';
+            }
+            
+            // 列信息
+            if (data.column_info && data.column_info.length > 0) {
+                html += '<h4>📊 列信息</h4>';
+                html += '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 12px;">';
+                html += '<tr><th>列名</th><th>数据类型</th><th>缺失值</th><th>唯一值</th><th>示例值</th></tr>';
+                data.column_info.forEach(col => {
+                    html += `<tr>
+                        <td>${col.column}</td>
+                        <td>${col.dtype}</td>
+                        <td>${col.missing_count} (${col.missing_percentage}%)</td>
+                        <td>${col.unique_count}</td>
+                        <td>${col.sample_values ? col.sample_values.slice(0, 3).join(', ') : 'N/A'}</td>
+                    </tr>`;
+                });
+                html += '</table>';
+            }
+            
+            // 数据样本
+            if (data.sample_data && data.sample_data.length > 0) {
+                html += '<h4>👀 数据样本 (前5行)</h4>';
+                html += '<div style="overflow-x: auto;">';
+                html += '<table border="1" style="border-collapse: collapse; width: 100%; font-size: 11px;">';
+                
+                // 表头
+                if (data.sample_data.length > 0) {
+                    html += '<tr>';
+                    Object.keys(data.sample_data[0]).forEach(key => {
+                        html += `<th style="padding: 4px; background: #f0f0f0;">${key}</th>`;
+                    });
+                    html += '</tr>';
+                    
+                    // 数据行
+                    data.sample_data.slice(0, 5).forEach(row => {
+                        html += '<tr>';
+                        Object.values(row).forEach(value => {
+                            const displayValue = value === null || value === undefined ? '<em>null</em>' : String(value);
+                            html += `<td style="padding: 4px;">${displayValue}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                }
+                html += '</table>';
+                html += '</div>';
+            }
+            
+            html += '</div>';
+            
+            contentDiv.innerHTML = html;
+            previewDiv.style.display = 'block';
+        }
+
+        // 4. 上传并处理文件
+        async function uploadFile() {
+            if (!checkApiKey()) return;
+            
+            const fileInput = document.getElementById('dataFile');
+            
+            if (!fileInput.files.length) {
+                alert('请选择文件');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('userId', currentUserId);
+            formData.append('username', currentUsername);
+            
+            // 获取处理选项
+            const processingOptions = {
+                handle_missing: document.getElementById('handleMissing').checked,
+                remove_duplicates: document.getElementById('removeDuplicates').checked,
+                standardize_text: document.getElementById('standardizeText').checked,
+                detect_outliers: document.getElementById('detectOutliers').checked,
+                optimize_types: document.getElementById('optimizeTypes').checked
+            };
+            
+            formData.append('processing_options', JSON.stringify(processingOptions));
+
+            try {
+                log('正在上传并处理文件: ' + file.name);
+                document.getElementById('uploadBtn').disabled = true;
+                document.getElementById('uploadBtn').textContent = '⏳ 上传处理中...';
+                
+                const uploadHeaders = {
+                    'X-User-ID': currentUserId,
+                    'X-Username-B64': encodeUsernameForHeader(currentUsername)
                 };
                 
                 // 添加API密钥到请求头
@@ -389,17 +582,145 @@
                 });
 
                 const data = await response.json();
-                document.getElementById('uploadResult').textContent = JSON.stringify(data, null, 2);
                 
                 if (data.success) {
-                    log(`CSV上传成功: ${data.data.rows_imported} 行数据已导入`);
+                    log(`文件上传成功: ${data.data.rows_imported} 行数据已导入到表 ${data.data.table_name}`);
+                    displayUploadResult(data.data);
                 } else {
-                    log('CSV上传失败: ' + data.message);
+                    log('文件上传失败: ' + data.message);
+                    document.getElementById('uploadResultContent').textContent = '上传失败: ' + data.message;
                 }
             } catch (error) {
-                log('CSV上传出错: ' + error.message);
-                document.getElementById('uploadResult').textContent = 'Error: ' + error.message;
+                log('文件上传出错: ' + error.message);
+                document.getElementById('uploadResultContent').textContent = '上传出错: ' + error.message;
+            } finally {
+                document.getElementById('uploadBtn').disabled = false;
+                document.getElementById('uploadBtn').textContent = '📤 上传并处理文件';
             }
+        }
+
+        // 显示上传结果
+        function displayUploadResult(data) {
+            let result = `✅ 文件上传成功!\n\n`;
+            result += `📊 导入信息:\n`;
+            result += `- 表名: ${data.table_name}\n`;
+            result += `- 导入行数: ${data.rows_imported}\n`;
+            result += `- 导入列数: ${data.columns_imported}\n\n`;
+            
+            if (data.quality_report) {
+                result += `⭐ 数据质量评分: ${data.quality_report.quality_score}/100\n\n`;
+                
+                if (data.quality_report.quality_issues && data.quality_report.quality_issues.length > 0) {
+                    result += `⚠️ 质量问题:\n`;
+                    data.quality_report.quality_issues.forEach(issue => {
+                        result += `- ${issue}\n`;
+                    });
+                    result += `\n`;
+                }
+            }
+            
+            if (data.processing_log && data.processing_log.length > 0) {
+                result += `🔧 数据处理日志:\n`;
+                data.processing_log.forEach(log => {
+                    result += `- ${log}\n`;
+                });
+                result += `\n`;
+            }
+            
+            result += `💡 现在您可以开始分析这个数据表了！`;
+            
+            document.getElementById('uploadResultContent').textContent = result;
+        }
+
+        // 刷新表列表
+        async function refreshTablesList() {
+            if (!checkApiKey()) return;
+            
+            try {
+                log('正在获取表列表...');
+                document.getElementById('refreshTablesBtn').disabled = true;
+                document.getElementById('refreshTablesBtn').textContent = '⏳ 获取中...';
+                
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'X-User-ID': currentUserId,
+                    'X-Username-B64': encodeUsernameForHeader(currentUsername)
+                };
+                
+                // 添加API密钥到请求头
+                if (currentApiKey) {
+                    headers['X-API-Key'] = currentApiKey;
+                }
+                
+                const response = await fetch('http://localhost:5000/api/tables-info', {
+                    method: 'GET',
+                    headers: headers
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    log('表列表获取成功');
+                    displayTablesList(data.data);
+                } else {
+                    log('表列表获取失败: ' + data.message);
+                    document.getElementById('tablesList').innerHTML = '获取失败: ' + data.message;
+                }
+            } catch (error) {
+                log('表列表获取出错: ' + error.message);
+                document.getElementById('tablesList').innerHTML = '获取出错: ' + error.message;
+            } finally {
+                document.getElementById('refreshTablesBtn').disabled = false;
+                document.getElementById('refreshTablesBtn').textContent = '🔄 刷新表列表';
+            }
+        }
+
+        // 显示表列表
+        function displayTablesList(data) {
+            const tablesDiv = document.getElementById('tablesList');
+            
+            // 添加调试信息
+            console.log('displayTablesList 接收到的数据:', data);
+            console.log('data.tables 类型:', typeof data.tables);
+            console.log('data.tables 是否为数组:', Array.isArray(data.tables));
+            
+            if (!data.tables || data.tables.length === 0) {
+                tablesDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">当前会话中没有数据表<br>请先上传文件</p>';
+                return;
+            }
+            
+            // 确保 data.tables 是数组
+            if (!Array.isArray(data.tables)) {
+                console.error('data.tables 不是数组:', data.tables);
+                tablesDiv.innerHTML = '<p style="color: red;">数据格式错误: tables 不是数组</p>';
+                return;
+            }
+            
+            let html = '<div>';
+            html += `<p><strong>当前会话中共有 ${data.tables.length} 个数据表:</strong></p>`;
+            
+            data.tables.forEach((table, index) => {
+                html += '<div style="border: 1px solid #ddd; margin: 10px 0; padding: 10px; border-radius: 5px; background: white;">';
+                html += `<h4 style="margin-top: 0; color: #333;">📊 ${table.table_name}</h4>`;
+                html += `<p><strong>文件名:</strong> ${table.original_filename || 'N/A'}</p>`;
+                html += `<p><strong>行数:</strong> ${table.row_count} | <strong>列数:</strong> ${table.column_count}</p>`;
+                html += `<p><strong>创建时间:</strong> ${table.created_at || 'N/A'}</p>`;
+                
+                if (table.columns && table.columns.length > 0) {
+                    html += '<p><strong>列名:</strong> ';
+                    const columnNames = table.columns.slice(0, 10).join(', '); // 只显示前10个列名
+                    html += columnNames;
+                    if (table.columns.length > 10) {
+                        html += ` ... (共${table.columns.length}列)`;
+                    }
+                    html += '</p>';
+                }
+                
+                html += '</div>';
+            });
+            
+            html += '</div>';
+            tablesDiv.innerHTML = html;
         }
 
         // 配置 marked
@@ -520,7 +841,7 @@
                     'Accept': 'text/event-stream',
                     'Cache-Control': 'no-cache',
                     'X-User-ID': currentUserId,
-                    'X-Username': encodeURIComponent(currentUsername)
+                    'X-Username-B64': encodeUsernameForHeader(currentUsername)
                 };
                 
                 // 添加API密钥到请求头
