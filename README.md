@@ -405,8 +405,8 @@ python start.py
 
 - **项目地址**：https://github.com/szqshan/DataAnalyzer
 - **问题反馈**：https://github.com/szqshan/DataAnalyzer/issues
-- **作者**：山志强 (szqshan)
-
+- **作者**：Shawn
+  
 ## 📄 开源协议
 
 本项目采用 MIT 协议 - 详见 [LICENSE](LICENSE) 文件
@@ -420,5 +420,5 @@ python start.py
 ---
 
 **版本信息**：v1.1.2
-**最后更新**：2024年1月
+**最后更新**：2025年6月21日
 **兼容性**：Python 3.7+ 
