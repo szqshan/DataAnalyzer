@@ -90,10 +90,10 @@
         <pre id="uploadResult"></pre>
         
         <h3>当前会话中的数据表</h3>
-        <button onclick="refreshTablesList()" id="refreshTablesBtn">🔄 刷新表列表</button>
-        <div id="tablesList" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-            点击"刷新表列表"查看当前会话中的数据表
-        </div>
+                    <button onclick="refreshTablesList()" id="refreshTablesBtn">🔄 刷新表列表</button>
+            <div id="tablesList" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
+                点击"刷新表列表"查看当前会话中的数据表
+            </div>
     </div>
 
     <hr>
@@ -242,7 +242,7 @@
         let currentUserId = 'test_user_001';
         let currentUsername = 'TestUser';
         let currentApiKey = '';
-        let latestReportHtml = '';
+        // 注意：HTML报告功能已移除，后端不提供 /api/latest-report 接口
         let currentConversationId = null;
 
         // 设置用户信息
@@ -411,8 +411,8 @@
                 
                 if (data.success) {
                     log(`CSV上传成功: ${data.data.rows_imported} 行数据已导入`);
-                    // 上传成功后自动刷新表列表
-                    refreshTablesList();
+                                    // 上传成功后自动刷新表列表
+                refreshTablesList();
                 } else {
                     log('CSV上传失败: ' + data.message);
                 }
@@ -429,15 +429,9 @@
             try {
                 log('正在获取表列表...');
                 
-                const headers = {
-                    'X-User-ID': currentUserId,
-                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername))),
-                    'X-API-Key': currentApiKey
-                };
-                
                 const response = await fetch('http://localhost:5000/api/tables-info', {
                     method: 'GET',
-                    headers: headers
+                    headers: getHeaders()
                 });
 
                 const data = await response.json();
@@ -455,7 +449,7 @@
             }
         }
 
-        // 显示表列表
+        // 显示表列表（增强版 - 支持详细表结构信息）
         function displayTablesList(data) {
             const tablesDiv = document.getElementById('tablesList');
             
@@ -471,18 +465,56 @@
             
             let html = '<div>';
             html += `<p><strong>当前会话中共有 ${data.tables.length} 个数据表:</strong></p>`;
+            html += `<p><small>数据库路径: ${data.database_path}</small></p>`;
             
             data.tables.forEach((table, index) => {
                 html += `
-                    <div style="margin: 10px 0; padding: 15px; border: 1px solid #ddd; border-radius: 6px; background: #fff;">
-                        <h4 style="margin: 0 0 8px 0; color: #333;">
+                    <div style="margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        <h4 style="margin: 0 0 10px 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px;">
                             📊 表 ${index + 1}: ${table.table_name}
                         </h4>
-                        <div style="margin-left: 20px; color: #666; font-size: 14px;">
-                            <p><strong>原始文件名:</strong> ${table.original_filename}</p>
-                            <p><strong>数据规模:</strong> ${table.row_count} 行 × ${table.column_count} 列</p>
-                            <p><strong>创建时间:</strong> ${new Date(table.created_at).toLocaleString()}</p>
-                            <p><strong>列名:</strong> ${table.columns.join(', ')}</p>
+                        <div style="margin-left: 10px; color: #666; font-size: 14px;">
+                            <p><strong>📁 原始文件:</strong> ${table.original_filename}</p>
+                            <p><strong>📏 数据规模:</strong> ${table.row_count} 行 × ${table.columns.length} 列</p>
+                            <p><strong>🕒 创建时间:</strong> ${table.created_at}</p>
+                            <p><strong>📝 描述:</strong> ${table.description}</p>
+                            
+                            <!-- 列结构信息 -->
+                            <div style="margin-top: 10px;">
+                                <strong>🏗️ 列结构:</strong>
+                                <div style="margin-left: 15px; max-height: 150px; overflow-y: auto; background: #f8f9fa; padding: 8px; border-radius: 4px; margin-top: 5px;">
+                `;
+                
+                table.columns.forEach((col, colIndex) => {
+                    html += `<span style="display: inline-block; margin: 2px 8px 2px 0; padding: 2px 6px; background: #e9ecef; border-radius: 3px; font-size: 12px;">${col.name} (${col.type})</span>`;
+                });
+                
+                html += `
+                                </div>
+                            </div>
+                            
+                            <!-- 样本数据 -->
+                            ${table.sample_data && table.sample_data.length > 0 ? `
+                            <div style="margin-top: 10px;">
+                                <strong>📋 样本数据 (前3行):</strong>
+                                <div style="margin-top: 5px; font-size: 12px; background: #f8f9fa; padding: 8px; border-radius: 4px; overflow-x: auto;">
+                                    <table style="width: 100%; border-collapse: collapse; min-width: 400px;">
+                                        <thead>
+                                            <tr style="background: #e9ecef;">
+                                                ${table.columns.map(col => `<th style="border: 1px solid #ddd; padding: 4px; text-align: left;">${col.name}</th>`).join('')}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${table.sample_data.map(row => `
+                                                <tr>
+                                                    ${table.columns.map(col => `<td style="border: 1px solid #ddd; padding: 4px; max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${row[col.name] || ''}</td>`).join('')}
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -976,64 +1008,8 @@
             document.getElementById('stopBtn').disabled = true;
         }
 
-        // 5. 获取最新HTML报告 (修复版本)
-        async function getLatestReport() {
-            try {
-                log('正在获取最新HTML报告...');
-                
-                const response = await fetch('http://localhost:5000/api/latest-report', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-
-                const data = await response.json();
-                
-                if (data.success && data.html_content) {
-                    log('HTML报告获取成功');
-                    latestReportHtml = data.html_content;
-                    
-                    // 显示报告信息
-                    document.getElementById('reportInfo').innerHTML = `
-                        <strong>报告信息:</strong><br>
-                        文件路径: ${data.file_path}<br>
-                        最后修改: ${data.last_modified}<br>
-                        文件大小: ${data.file_size} 字符<br>
-                        <button onclick="showReportInFrame()">在下方预览</button>
-                    `;
-                    
-                    // 启用查看按钮
-                    document.getElementById('viewReportBtn').disabled = false;
-                    
-                    log(`HTML报告加载成功，大小: ${data.file_size} 字符`);
-                } else {
-                    log('获取HTML报告失败: ' + (data.message || '未知错误'));
-                    document.getElementById('reportInfo').innerHTML = '获取报告失败: ' + (data.message || '未知错误');
-                }
-            } catch (error) {
-                log('获取HTML报告出错: ' + error.message);
-                document.getElementById('reportInfo').innerHTML = 'Error: ' + error.message;
-            }
-        }
-
-        // 在iframe中显示报告
-        function showReportInFrame() {
-            if (latestReportHtml) {
-                const iframe = document.getElementById('reportFrame');
-                iframe.style.display = 'block';
-                iframe.srcdoc = latestReportHtml;
-                log('HTML报告已在下方显示');
-            }
-        }
-
-        // 在新标签页查看报告
-        function viewReportInNewTab() {
-            if (latestReportHtml) {
-                const newWindow = window.open();
-                newWindow.document.write(latestReportHtml);
-                newWindow.document.close();
-                log('HTML报告已在新标签页打开');
-            }
-        }
+        // 注意：HTML报告功能已移除，后端不提供 /api/latest-report 接口
+        // 用户可以通过AI分析直接生成和查看报告
 
         // 页面加载完成后设置默认用户信息
         window.addEventListener('load', function() {

@@ -235,6 +235,52 @@ def upload_csv(user_data):
             "user_info": user_data
         }), 500
 
+@app.route('/api/tables-info', methods=['GET'])
+@require_user
+def get_tables_info(user_data):
+    """获取当前对话中所有表的详细信息"""
+    try:
+        print(f"📊 用户 {user_data['username']} 请求获取表信息...")
+        
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({"success": False, "message": "未提供API密钥"}), 400
+        
+        analyzer = get_user_analyzer(user_data, api_key)
+        
+        # 检查是否有数据库连接
+        if not analyzer.current_db_path:
+            return jsonify({
+                "success": False, 
+                "message": "未连接到数据库，请先上传数据文件"
+            }), 400
+        
+        # 获取表结构信息
+        table_schema_result = analyzer.get_table_schema()
+        
+        # 如果返回字符串，说明是错误信息
+        if isinstance(table_schema_result, str):
+            return jsonify({
+                "success": False,
+                "message": table_schema_result
+            }), 400
+        
+        # 返回成功结果
+        return jsonify({
+            "success": True,
+            "message": f"成功获取 {table_schema_result['total_tables']} 个表的信息",
+            "data": table_schema_result,
+            "user_info": user_data
+        })
+        
+    except Exception as e:
+        print(f"❌ 获取表信息失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"获取表信息失败: {str(e)}",
+            "user_info": user_data
+        }), 500
+
 @app.route('/api/analyze-stream', methods=['POST'])
 @require_user
 def analyze_data_stream(user_data):
