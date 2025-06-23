@@ -11,10 +11,14 @@
     <!-- 用户信息设置 -->
     <div>
         <h2>1. 用户信息设置</h2>
-        <label>用户ID: <input type="text" id="userId" value="test_user_001" placeholder="用户ID"></label><br><br>
-        <label>用户名: <input type="text" id="username" value="TestUser" placeholder="用户名"></label><br><br>
-        <label>API密钥: <input type="password" id="apiKey" value="" placeholder="输入您的API密钥 (如: sk-ant-api...)" style="width: 400px;"></label><br>
-        <small style="color: #666; margin-left: 80px;">💡 每个用户使用独立的API密钥，确保数据隔离和成本控制</small><br><br>
+        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
+            <strong>⚠️ 重要提醒：</strong> 系统现在仅支持付费用户访问，所有三个字段（用户ID、用户名、API密钥）都是<strong>必需的</strong>。
+            <br>请确保提供有效的 Anthropic API Key 以正常使用系统功能。
+        </div>
+        <label>用户ID: <input type="text" id="userId" value="test_user_001" placeholder="用户ID（必需）"></label><br><br>
+        <label>用户名: <input type="text" id="username" value="TestUser" placeholder="用户名（必需）"></label><br><br>
+        <label>API密钥: <input type="password" id="apiKey" value="" placeholder="输入您的API密钥（必需）如: sk-ant-api..." style="width: 400px;"></label><br>
+        <small style="color: #666; margin-left: 80px;">🔑 API密钥必须有效，用于访问Anthropic Claude服务</small><br><br>
         <button onclick="setUserInfo()">设置用户信息</button>
         <div id="currentUser">当前用户: 未设置</div>
         <div id="apiKeyStatus" style="margin-top: 10px; color: #666;">API密钥状态: 未设置</div>
@@ -151,6 +155,7 @@
         <label>对话ID: <input type="text" id="historyDetailId" placeholder="输入对话ID"></label>
         <button onclick="getHistoryDetail()">获取详情</button>
         <button onclick="deleteHistoryDetail()">删除该记录</button>
+        <button onclick="loadConversationMessages()">📚 加载此对话到多轮窗口</button>
         <br><br>
         <pre id="historyResult" style="background:#f8f8f8; border:1px solid #ccc; padding:10px; min-height:120px;"></pre>
     </div>
@@ -264,27 +269,41 @@
 
         // 获取请求头
         function getHeaders() {
+            // 强制要求用户ID、用户名和API Key
+            if (!currentUserId || !currentUsername || !currentApiKey) {
+                throw new Error('用户ID、用户名和API Key都是必需的');
+            }
+            
             const headers = {
                 'Content-Type': 'application/json',
                 'X-User-ID': currentUserId,
-                'X-Username': encodeURIComponent(currentUsername)
+                'X-Username': encodeURIComponent(currentUsername),
+                'X-API-Key': currentApiKey
             };
-            
-            // 只有在API密钥存在时才添加
-            if (currentApiKey) {
-                headers['X-API-Key'] = currentApiKey;
-            }
             
             return headers;
         }
 
-        // 检查API密钥是否已设置
-        function checkApiKey() {
+        // 检查用户认证信息是否完整
+        function checkUserAuth() {
+            if (!currentUserId) {
+                alert('请先设置用户ID！');
+                return false;
+            }
+            if (!currentUsername) {
+                alert('请先设置用户名！');
+                return false;
+            }
             if (!currentApiKey) {
-                alert('请先设置API密钥！');
+                alert('请先设置API密钥！访问系统需要有效的Anthropic API Key。');
                 return false;
             }
             return true;
+        }
+
+        // 向后兼容的API Key检查函数
+        function checkApiKey() {
+            return checkUserAuth();
         }
 
         // 日志记录函数
@@ -338,7 +357,7 @@
 
         // 2. 获取系统状态
         async function getStatus() {
-            if (!checkApiKey()) return;
+            if (!checkUserAuth()) return;
             
             try {
                 log('正在获取系统状态...');
@@ -357,7 +376,7 @@
 
         // 3. 上传CSV文件
         async function uploadCSV() {
-            if (!checkApiKey()) return;
+            if (!checkUserAuth()) return;
             
             const fileInput = document.getElementById('csvFile');
             
@@ -377,13 +396,9 @@
                 
                 const uploadHeaders = {
                     'X-User-ID': currentUserId,
-                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername)))
+                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername))),
+                    'X-API-Key': currentApiKey
                 };
-                
-                // 添加API密钥到请求头
-                if (currentApiKey) {
-                    uploadHeaders['X-API-Key'] = currentApiKey;
-                }
                 
                 const response = await fetch('http://localhost:5000/api/upload', {
                     method: 'POST',
@@ -409,19 +424,16 @@
 
         // 刷新表列表
         async function refreshTablesList() {
-            if (!checkApiKey()) return;
+            if (!checkUserAuth()) return;
             
             try {
                 log('正在获取表列表...');
                 
                 const headers = {
                     'X-User-ID': currentUserId,
-                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername)))
+                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername))),
+                    'X-API-Key': currentApiKey
                 };
-                
-                if (currentApiKey) {
-                    headers['X-API-Key'] = currentApiKey;
-                }
                 
                 const response = await fetch('http://localhost:5000/api/tables-info', {
                     method: 'GET',
@@ -561,7 +573,7 @@
 
         // 4. 开始多轮对话（包含富文本）
         async function startMultiTurnChat() {
-            if (!checkApiKey()) return;
+            if (!checkUserAuth()) return;
             
             const query = document.getElementById('analysisQuery').value.trim();
             if (!query) {
@@ -598,13 +610,9 @@
                     'Accept': 'text/event-stream',
                     'Cache-Control': 'no-cache',
                     'X-User-ID': currentUserId,
-                    'X-Username': encodeURIComponent(currentUsername)
+                    'X-Username': encodeURIComponent(currentUsername),
+                    'X-API-Key': currentApiKey
                 };
-                
-                // 添加API密钥到请求头
-                if (currentApiKey) {
-                    streamHeaders['X-API-Key'] = currentApiKey;
-                }
                 
                 const response = await fetch('http://localhost:5000/api/analyze-stream', {
                     method: 'POST',
@@ -1155,6 +1163,7 @@
                                     <div style="font-size: 12px; color: #666;">创建时间: ${conv.created_time}</div>
                                     <div style="font-size: 12px; color: #666;">消息数: ${conv.message_count}</div>
                                     <button onclick="switchToConversation('${conv.conversation_id}')" style="margin-top: 5px; padding: 2px 8px; font-size: 11px;">切换到此对话</button>
+                                    <button onclick="loadConversationToChat('${conv.conversation_id}')" style="margin-top: 5px; margin-left: 5px; padding: 2px 8px; font-size: 11px; background-color: #4CAF50; color: white; border: none; border-radius: 3px;">📚 加载到聊天</button>
                                     <button onclick="deleteConversation('${conv.conversation_id}', '${conv.conversation_name}')" style="margin-top: 5px; margin-left: 5px; padding: 2px 8px; font-size: 11px; background-color: #ff4444; color: white; border: none; border-radius: 3px;">删除</button>
                                 </div>
                             `;
@@ -1257,6 +1266,37 @@
         function switchToConversation(conversationId) {
             document.getElementById('switchConversationId').value = conversationId;
             switchConversation();
+        }
+
+        // 加载对话消息到多轮对话窗口
+        async function loadConversationToChat(conversationId) {
+            try {
+                log(`📚 正在加载对话 ${conversationId} 的历史消息...`);
+                
+                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.conversation && data.conversation.messages) {
+                    renderHistoryMessages(data.conversation.messages);
+                    log(`✅ 对话历史加载成功，共 ${data.conversation.messages.length} 条消息`);
+                    
+                    // 更新当前对话ID
+                    currentConversationId = conversationId;
+                    
+                    // 滚动到多轮对话窗口
+                    document.getElementById('aiResponse').scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    log('❌ 加载对话历史失败: ' + (data.message || '对话数据为空'));
+                    alert('加载对话历史失败: ' + (data.message || '对话数据为空'));
+                }
+            } catch (error) {
+                log('❌ 加载对话历史出错: ' + error.message);
+                alert('加载对话历史出错: ' + error.message);
+            }
         }
 
         // 删除对话函数
@@ -1388,6 +1428,316 @@
             } catch (error) {
                 alert('删除消息出错: ' + error.message);
                 log('删除消息出错: ' + error.message);
+            }
+        }
+
+        // 历史记录测试区域的加载对话消息功能
+        async function loadConversationMessages() {
+            const conversationId = document.getElementById('historyDetailId').value.trim();
+            if (!conversationId) {
+                alert('请先输入对话ID');
+                return;
+            }
+            
+            try {
+                log(`📚 正在从历史记录加载对话 ${conversationId}...`);
+                
+                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.conversation) {
+                    // 显示对话详情到历史记录结果区域
+                    document.getElementById('historyResult').textContent = JSON.stringify(data.conversation, null, 2);
+                    
+                    // 如果有消息，加载到多轮对话窗口
+                    if (data.conversation.messages && data.conversation.messages.length > 0) {
+                        renderHistoryMessages(data.conversation.messages);
+                        log(`✅ 对话历史加载成功，共 ${data.conversation.messages.length} 条消息`);
+                        
+                        // 更新当前对话ID
+                        currentConversationId = conversationId;
+                        
+                        // 滚动到多轮对话窗口
+                        document.getElementById('aiResponse').scrollIntoView({ behavior: 'smooth' });
+                        
+                        alert(`对话历史加载成功！\n对话名称: ${data.conversation.conversation_name}\n消息数量: ${data.conversation.messages.length} 条\n\n已加载到多轮对话窗口，请向下滚动查看。`);
+                    } else {
+                        log('⚠️ 该对话没有消息记录');
+                        alert('该对话没有消息记录');
+                    }
+                } else {
+                    log('❌ 加载对话失败: ' + (data.message || '对话不存在'));
+                    alert('加载对话失败: ' + (data.message || '对话不存在'));
+                }
+            } catch (error) {
+                log('❌ 加载对话出错: ' + error.message);
+                alert('加载对话出错: ' + error.message);
+            }
+        }
+
+        // 渲染历史消息到多轮对话窗口
+        function renderHistoryMessages(messages) {
+            const aiDiv = document.getElementById('aiResponse');
+            
+            // 清空现有内容
+            aiDiv.innerHTML = '';
+            
+            if (!messages || messages.length === 0) {
+                aiDiv.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">该对话没有消息记录</div>';
+                return;
+            }
+            
+            // 添加历史记录标识
+            const historyHeader = document.createElement('div');
+            historyHeader.style.cssText = 'text-align: center; padding: 10px; background: #f0f8ff; border: 1px solid #ccc; margin-bottom: 10px; border-radius: 4px; color: #666;';
+            historyHeader.innerHTML = `📚 历史对话记录 (共 ${messages.length} 条消息)`;
+            aiDiv.appendChild(historyHeader);
+            
+            // 渲染每条消息
+            messages.forEach((message, index) => {
+                const messageDiv = renderSingleMessage(message, index);
+                aiDiv.appendChild(messageDiv);
+            });
+            
+            // 滚动到底部
+            aiDiv.scrollTop = aiDiv.scrollHeight;
+        }
+
+        // 渲染单条消息
+        function renderSingleMessage(message, index) {
+            const messageDiv = document.createElement('div');
+            messageDiv.setAttribute('data-message-id', message.id);
+            messageDiv.style.cssText = 'margin-bottom: 15px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;';
+            
+            // 判断消息类型
+            const messageType = getMessageDisplayType(message);
+            
+            // 根据消息类型设置样式和内容
+            switch(messageType) {
+                case 'user-input':
+                    messageDiv.className = 'user-message';
+                    messageDiv.style.backgroundColor = '#e3f2fd';
+                    messageDiv.style.marginLeft = '20%';
+                    messageDiv.innerHTML = `
+                        <div style="font-weight: bold; color: #1976d2; margin-bottom: 5px;">👤 用户</div>
+                        <div class="message-content">${renderMessageContent(message.content)}</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${formatTimestamp(message.timestamp)}</div>
+                    `;
+                    break;
+                    
+                case 'ai-response':
+                case 'ai-with-tools':
+                case 'ai-tool-only':
+                    messageDiv.className = 'ai-message';
+                    messageDiv.style.backgroundColor = '#f5f5f5';
+                    messageDiv.style.marginRight = '20%';
+                    messageDiv.innerHTML = `
+                        <div style="font-weight: bold; color: #4caf50; margin-bottom: 5px;">🤖 AI助手</div>
+                        <div class="message-content">${renderMessageContent(message.content)}</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${formatTimestamp(message.timestamp)}</div>
+                    `;
+                    break;
+                    
+                case 'tool-result':
+                    messageDiv.className = 'tool-result-message';
+                    messageDiv.style.backgroundColor = '#e8f5e8';
+                    messageDiv.style.margin = '0 10%';
+                    messageDiv.style.border = '1px dashed #4caf50';
+                    messageDiv.innerHTML = `
+                        <div style="font-weight: bold; color: #2e7d32; margin-bottom: 5px;">⚙️ 工具执行结果</div>
+                        <div class="message-content" style="font-family: monospace; font-size: 13px;">${renderMessageContent(message.content)}</div>
+                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${formatTimestamp(message.timestamp)}</div>
+                    `;
+                    break;
+            }
+            
+            return messageDiv;
+        }
+
+        // 判断消息显示类型
+        function getMessageDisplayType(message) {
+            if (message.role === 'user') {
+                const hasToolResult = message.content.some(c => c.type === 'tool_result');
+                return hasToolResult ? 'tool-result' : 'user-input';
+            } else if (message.role === 'assistant') {
+                const hasToolUse = message.content.some(c => c.type === 'tool_use');
+                const hasText = message.content.some(c => c.type === 'text');
+                
+                if (hasToolUse && hasText) {
+                    return 'ai-with-tools';
+                } else if (hasToolUse) {
+                    return 'ai-tool-only';
+                } else {
+                    return 'ai-response';
+                }
+            }
+            return 'unknown';
+        }
+
+        // 渲染消息内容
+        function renderMessageContent(contentArray) {
+            if (!Array.isArray(contentArray)) {
+                return '<div>消息格式错误</div>';
+            }
+            
+            return contentArray.map(item => {
+                switch(item.type) {
+                    case 'text':
+                        return `<div class="text-content">${marked.parse(item.text)}</div>`;
+                        
+                    case 'tool_use':
+                        return `
+                            <div class="tool-call" style="background: #fff3cd; padding: 8px; border-radius: 4px; margin: 5px 0;">
+                                <div style="font-weight: bold; color: #856404;">🔧 调用工具: ${item.name}</div>
+                                <pre style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 5px;">${JSON.stringify(item.input, null, 2)}</pre>
+                            </div>
+                        `;
+                        
+                    case 'tool_result':
+                        let resultContent = item.content;
+                        if (typeof resultContent === 'object') {
+                            resultContent = JSON.stringify(resultContent, null, 2);
+                        }
+                        return `
+                            <div class="tool-result" style="background: #d1ecf1; padding: 8px; border-radius: 4px; margin: 5px 0;">
+                                <div style="font-weight: bold; color: #0c5460;">📊 执行结果:</div>
+                                <pre style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 5px; white-space: pre-wrap;">${resultContent}</pre>
+                            </div>
+                        `;
+                        
+                    default:
+                        return `<div>未知内容类型: ${item.type}</div>`;
+                }
+            }).join('');
+        }
+
+        // 格式化时间戳
+        function formatTimestamp(timestamp) {
+            try {
+                const date = new Date(timestamp);
+                return date.toLocaleString('zh-CN');
+            } catch (error) {
+                return timestamp;
+            }
+        }
+
+        // 清空多轮对话窗口
+        function clearMultiTurnChatWindow() {
+            const aiDiv = document.getElementById('aiResponse');
+            aiDiv.innerHTML = `
+                <div style="text-align: center; color: #666; padding: 40px;">
+                    <p>📱 多轮对话模式</p>
+                    <p>请在上方输入框中输入您的问题，点击"开始多轮对话"按钮开始聊天</p>
+                    <p>支持富文本消息和连续对话</p>
+                </div>
+            `;
+        }
+
+        // 7. 历史记录接口测试函数
+        async function getHistoryList() {
+            try {
+                log('正在获取历史记录列表...');
+                const response = await fetch('http://localhost:5000/api/conversations', {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                const data = await response.json();
+                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
+                log('历史记录列表获取完成');
+            } catch (error) {
+                log('获取历史记录列表失败: ' + error.message);
+                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getHistoryStats() {
+            try {
+                log('正在获取历史记录统计信息...');
+                const response = await fetch('http://localhost:5000/api/conversations/stats', {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                const data = await response.json();
+                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
+                log('历史记录统计信息获取完成');
+            } catch (error) {
+                log('获取历史记录统计信息失败: ' + error.message);
+                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getRecentHistory() {
+            try {
+                log('正在获取最近5条历史记录...');
+                const response = await fetch('http://localhost:5000/api/conversations/recent?limit=5', {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                const data = await response.json();
+                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
+                log('最近历史记录获取完成');
+            } catch (error) {
+                log('获取最近历史记录失败: ' + error.message);
+                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function getHistoryDetail() {
+            const conversationId = document.getElementById('historyDetailId').value.trim();
+            if (!conversationId) {
+                alert('请输入对话ID');
+                return;
+            }
+            
+            try {
+                log(`正在获取对话 ${conversationId} 的详情...`);
+                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
+                    method: 'GET',
+                    headers: getHeaders()
+                });
+                const data = await response.json();
+                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
+                log('对话详情获取完成');
+            } catch (error) {
+                log('获取对话详情失败: ' + error.message);
+                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
+            }
+        }
+
+        async function deleteHistoryDetail() {
+            const conversationId = document.getElementById('historyDetailId').value.trim();
+            if (!conversationId) {
+                alert('请输入对话ID');
+                return;
+            }
+            
+            if (!confirm(`确定要删除对话 ${conversationId} 吗？此操作无法撤销！`)) {
+                return;
+            }
+            
+            try {
+                log(`正在删除对话 ${conversationId}...`);
+                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
+                    method: 'DELETE',
+                    headers: getHeaders()
+                });
+                const data = await response.json();
+                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
+                
+                if (data.success) {
+                    log('对话删除成功');
+                    // 清空输入框
+                    document.getElementById('historyDetailId').value = '';
+                } else {
+                    log('对话删除失败: ' + data.message);
+                }
+            } catch (error) {
+                log('删除对话失败: ' + error.message);
+                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
             }
         }
 

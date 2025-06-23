@@ -1,0 +1,236 @@
+这段代码展示了如何：
+获取原始数据：从API获取对话历史记录
+解析消息结构：根据role和content[].type判断消息类型
+提取不同类型数据：
+用户输入文本
+AI回复文本
+工具调用信息
+工具执行结果
+数据分组和筛选：按消息类型分组，方便后续处理
+工具调用配对：将工具调用和对应结果关联起来
+关键的数据识别逻辑就在parseMessages函数中，它会给每条消息标记正确的messageType，然后您就可以根据这个类型来决定在前端如何展示不同的消息了。
+
+
+
+// 获取对话历史记录数据
+async function getConversationHistory(conversationId) {
+    try {
+        const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
+            method: 'GET',
+            headers: {
+                'X-User-ID': 'test_user_001',
+                'X-Username': 'TestUser',
+                'X-API-Key': 'your-api-key-here'
+            }
+        });
+        
+        const data = await response.json();
+        return data.messages || [];
+    } catch (error) {
+        console.error('获取对话历史失败:', error);
+        return [];
+    }
+}
+
+// 解析和分类消息数据
+function parseMessages(messages) {
+    const parsedMessages = [];
+    
+    messages.forEach(message => {
+        const messageData = {
+            id: message.id,
+            timestamp: message.timestamp,
+            role: message.role,
+            originalContent: message.content,
+            messageType: null,
+            textContent: [],
+            toolCalls: [],
+            toolResults: []
+        };
+        
+        // 根据role和content类型判断消息类型
+        if (message.role === 'user') {
+            // 检查是否包含工具结果
+            const hasToolResult = message.content.some(c => c.type === 'tool_result');
+            if (hasToolResult) {
+                messageData.messageType = 'tool-result';
+                // 提取工具结果数据
+                message.content.forEach(item => {
+                    if (item.type === 'tool_result') {
+                        messageData.toolResults.push({
+                            toolUseId: item.tool_use_id,
+                            content: item.content
+                        });
+                    }
+                });
+            } else {
+                messageData.messageType = 'user-input';
+                // 提取用户文本输入
+                message.content.forEach(item => {
+                    if (item.type === 'text') {
+                        messageData.textContent.push(item.text);
+                    }
+                });
+            }
+        } 
+        else if (message.role === 'assistant') {
+            const hasToolUse = message.content.some(c => c.type === 'tool_use');
+            const hasText = message.content.some(c => c.type === 'text');
+            
+            if (hasToolUse && hasText) {
+                messageData.messageType = 'ai-with-tools';
+            } else if (hasToolUse) {
+                messageData.messageType = 'ai-tool-only';
+            } else {
+                messageData.messageType = 'ai-response';
+            }
+            
+            // 提取AI文本回复和工具调用
+            message.content.forEach(item => {
+                if (item.type === 'text') {
+                    messageData.textContent.push(item.text);
+                } else if (item.type === 'tool_use') {
+                    messageData.toolCalls.push({
+                        id: item.id,
+                        name: item.name,
+                        input: item.input
+                    });
+                }
+            });
+        }
+        
+        parsedMessages.push(messageData);
+    });
+    
+    return parsedMessages;
+}
+
+// 按消息类型分组数据
+function groupMessagesByType(parsedMessages) {
+    const grouped = {
+        userInputs: [],
+        aiResponses: [],
+        aiWithTools: [],
+        toolResults: []
+    };
+    
+    parsedMessages.forEach(msg => {
+        switch(msg.messageType) {
+            case 'user-input':
+                grouped.userInputs.push(msg);
+                break;
+            case 'ai-response':
+                grouped.aiResponses.push(msg);
+                break;
+            case 'ai-with-tools':
+            case 'ai-tool-only':
+                grouped.aiWithTools.push(msg);
+                break;
+            case 'tool-result':
+                grouped.toolResults.push(msg);
+                break;
+        }
+    });
+    
+    return grouped;
+}
+
+// 获取特定类型的消息数据
+function getMessagesByType(messages, type) {
+    return messages.filter(msg => msg.messageType === type);
+}
+
+// 获取工具调用和结果的配对数据
+function getToolCallPairs(parsedMessages) {
+    const pairs = [];
+    
+    // 找到所有工具调用
+    const toolCalls = parsedMessages
+        .filter(msg => msg.toolCalls.length > 0)
+        .flatMap(msg => msg.toolCalls.map(tool => ({
+            ...tool,
+            timestamp: msg.timestamp,
+            messageId: msg.id
+        })));
+    
+    // 找到对应的工具结果
+    toolCalls.forEach(toolCall => {
+        const result = parsedMessages
+            .filter(msg => msg.toolResults.length > 0)
+            .flatMap(msg => msg.toolResults.map(result => ({
+                ...result,
+                timestamp: msg.timestamp,
+                messageId: msg.id
+            })))
+            .find(result => result.toolUseId === toolCall.id);
+        
+        pairs.push({
+            call: toolCall,
+            result: result || null
+        });
+    });
+    
+    return pairs;
+}
+
+// 使用示例
+async function demonstrateDataRetrieval() {
+    // 1. 获取原始对话数据
+    const conversationId = 'conv_20250623_210839_947';
+    const rawMessages = await getConversationHistory(conversationId);
+    console.log('原始消息数据:', rawMessages);
+    
+    // 2. 解析消息数据
+    const parsedMessages = parseMessages(rawMessages);
+    console.log('解析后的消息:', parsedMessages);
+    
+    // 3. 按类型分组
+    const groupedMessages = groupMessagesByType(parsedMessages);
+    console.log('用户输入:', groupedMessages.userInputs);
+    console.log('AI回复:', groupedMessages.aiResponses);
+    console.log('AI工具调用:', groupedMessages.aiWithTools);
+    console.log('工具结果:', groupedMessages.toolResults);
+    
+    // 4. 获取特定类型消息
+    const userInputs = getMessagesByType(parsedMessages, 'user-input');
+    const aiResponses = getMessagesByType(parsedMessages, 'ai-response');
+    console.log('仅用户输入:', userInputs);
+    console.log('仅AI回复:', aiResponses);
+    
+    // 5. 获取工具调用配对
+    const toolPairs = getToolCallPairs(parsedMessages);
+    console.log('工具调用配对:', toolPairs);
+    
+    // 6. 提取纯文本内容
+    const allTextContent = parsedMessages
+        .filter(msg => msg.textContent.length > 0)
+        .map(msg => ({
+            role: msg.role,
+            type: msg.messageType,
+            text: msg.textContent.join(' '),
+            timestamp: msg.timestamp
+        }));
+    console.log('所有文本内容:', allTextContent);
+}
+
+// 获取对话列表数据
+async function getConversationsList() {
+    try {
+        const response = await fetch('http://localhost:5000/api/conversations/list', {
+            method: 'GET',
+            headers: {
+                'X-User-ID': 'test_user_001',
+                'X-Username': 'TestUser'
+            }
+        });
+        
+        const data = await response.json();
+        return data.conversations || [];
+    } catch (error) {
+        console.error('获取对话列表失败:', error);
+        return [];
+    }
+}
+
+// 调用示例
+demonstrateDataRetrieval();

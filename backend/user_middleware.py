@@ -11,15 +11,15 @@ import urllib.parse
 import re
 
 class UserManager:
-    """精简版用户管理器 - 清理调试输出"""
+    """用户管理器 - 仅支持付费用户"""
     
     def __init__(self, base_data_dir="data"):
         self.base_data_dir = Path(base_data_dir)
         self.base_data_dir.mkdir(exist_ok=True)
-        print(f"✅ 用户管理器初始化完成")
+        print(f"✅ 用户管理器初始化完成 - 仅支持付费用户模式")
     
     def get_user_from_request(self, request):
-        """从请求中提取用户信息"""
+        """从请求中提取用户信息 - 必须提供user_id和api_key"""
         user_id = None
         username = None
         api_key = None
@@ -69,30 +69,20 @@ class UserManager:
             except:
                 pass
         
-        # 策略4: 生成一致的访客ID（基于IP和User-Agent）
-        if not user_id:
-            ip = request.remote_addr or 'unknown'
-            user_agent = request.headers.get('User-Agent', 'unknown')
-            
-            # 创建一个相对稳定的访客ID（在同一小时内保持一致）
-            hour_seed = int(time.time() / 3600)  # 每小时变化
-            temp_seed = f"{ip}_{user_agent}_{hour_seed}"
-            guest_hash = hashlib.md5(temp_seed.encode('utf-8')).hexdigest()[:8]
-            user_id = f"guest_{guest_hash}"
-            
-            if not username:
-                username = f"Guest_{guest_hash[-4:]}"
+        # 验证必要字段
+        if not user_id or not api_key:
+            return None
         
         # 确保用户名安全
         if username:
             username = self._safe_username(username)
         else:
-            username = f"User_{str(user_id)[-4:]}"
+            username = f"User_{str(user_id)[-8:]}"
         
         user_info = {
             'user_id': str(user_id),
             'username': username,
-            'is_guest': str(user_id).startswith('guest_'),
+            'is_guest': False,  # 不再支持访客模式
             'api_key': api_key
         }
         
@@ -158,19 +148,27 @@ class UserManager:
 user_manager = UserManager()
 
 def require_user(f):
-    """装饰器：自动处理用户身份识别"""
+    """装饰器：要求用户提供有效的user_id和api_key"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         try:
             # 获取用户信息
             user_info = user_manager.get_user_from_request(request)
             
-            # 验证用户信息
-            if not user_info.get('user_id'):
+            # 验证用户信息 - 必须有user_id和api_key
+            if not user_info:
                 return jsonify({
                     "success": False, 
-                    "message": "用户身份识别失败"
-                }), 400
+                    "message": "需要提供有效的用户ID和API Key",
+                    "error_code": "MISSING_CREDENTIALS"
+                }), 401
+            
+            if not user_info.get('user_id') or not user_info.get('api_key'):
+                return jsonify({
+                    "success": False, 
+                    "message": "用户ID和API Key不能为空",
+                    "error_code": "INVALID_CREDENTIALS"
+                }), 401
             
             # 将用户信息传递给路由函数
             return f(user_info, *args, **kwargs)
@@ -178,7 +176,8 @@ def require_user(f):
         except Exception as e:
             return jsonify({
                 "success": False, 
-                "message": f"用户身份识别失败: {str(e)}"
+                "message": f"用户身份识别失败: {str(e)}",
+                "error_code": "AUTH_ERROR"
             }), 500
     
     return decorated_function
