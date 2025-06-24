@@ -109,7 +109,7 @@ class ConversationHistoryManager:
             # 创建对话信息
             conversation_info = {
                 "conversation_id": conversation_id,
-                "conversation_name": conversation_name or f"对话 {len(self.conversations_meta['conversations']) + 1}",
+                "conversation_name": conversation_name or "新对话",
                 "description": description or "",
                 "created_time": datetime.now().isoformat(),
                 "last_activity": datetime.now().isoformat(),
@@ -316,6 +316,20 @@ class ConversationHistoryManager:
         start_time = datetime.now().isoformat()
         
         try:
+            # 检查是否需要生成标题
+            conv_info = self.conversations_meta['conversations'][conversation_id]
+            if conv_info['conversation_name'] == "新对话":
+                # 为首条消息生成AI标题
+                try:
+                    new_title = self._generate_simple_title(user_query, user_data.get('api_key'))
+                    if new_title and new_title != "新对话":
+                        conv_info['conversation_name'] = new_title
+                        conv_info['last_activity'] = datetime.now().isoformat()
+                        self._save_conversations_meta()
+                        logging.info(f"✨ 对话标题已更新: {new_title}")
+                except Exception as e:
+                    logging.warning(f"⚠️ 标题生成失败，保持默认标题: {e}")
+            
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 
@@ -909,3 +923,91 @@ class ConversationHistoryManager:
         except Exception as e:
             logging.error(f"❌ 重置analysis.db时出错: {e}")
             # 不抛出异常，避免影响对话创建
+
+    def _generate_simple_title(self, user_query: str, api_key: str = None) -> str:
+        """简单的标题生成方法"""
+        try:
+            # 首先尝试AI生成
+            if api_key:
+                ai_title = self._ai_generate_title(user_query, api_key)
+                if ai_title:
+                    return ai_title
+            
+            # 降级到关键词提取
+            return self._extract_smart_title(user_query)
+            
+        except Exception as e:
+            logging.error(f"生成对话标题失败: {e}")
+            return self._extract_smart_title(user_query)
+
+    def _ai_generate_title(self, user_query: str, api_key: str) -> str:
+        """使用AI生成标题"""
+        try:
+            import anthropic
+            
+            prompt = f"""请为以下数据分析查询生成一个简短、准确的标题（不超过16个字符）：
+
+用户查询：{user_query}
+
+要求：
+1. 简洁明了，突出核心内容
+2. 中文输出
+3. 不要使用"分析"、"查询"、"请"等冗余词汇
+4. 直接返回标题，不要其他内容
+
+请直接返回标题："""
+            
+            client = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=50,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            
+            title = response.content[0].text.strip()
+            return title[:16] if len(title) <= 16 else title[:16]
+            
+        except Exception as e:
+            logging.warning(f"AI标题生成失败: {e}")
+            return None
+
+    def _extract_smart_title(self, user_query: str) -> str:
+        """智能提取标题关键词"""
+        try:
+            # 关键词映射字典
+            keyword_map = {
+                '销售': '销售数据',
+                '用户': '用户行为',
+                '客户': '客户分析',
+                '财务': '财务报表',
+                '库存': '库存管理',
+                '订单': '订单统计',
+                '产品': '产品分析',
+                '收入': '收入报告',
+                '成本': '成本分析',
+                '利润': '利润统计',
+                '趋势': '趋势分析',
+                '月度': '月度报表',
+                '年度': '年度总结',
+                '地区': '地区分析',
+                '渠道': '渠道数据'
+            }
+            
+            query_lower = user_query.lower()
+            
+            # 查找匹配的关键词
+            for keyword, title in keyword_map.items():
+                if keyword in query_lower:
+                    return title
+            
+            # 如果没有匹配，根据查询长度判断
+            if len(user_query) <= 6:
+                return user_query[:6]
+            elif len(user_query) <= 12:
+                return user_query[:8] + "分析"
+            else:
+                return "数据分析"
+                
+        except Exception:
+            return f"对话_{datetime.now().strftime('%H%M')}"
+    

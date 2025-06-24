@@ -570,8 +570,8 @@ def create_new_conversation(user_data):
         
         # 获取请求参数
         data = request.get_json() or {}
-        conversation_name = data.get('conversation_name')
         description = data.get('description')
+        # conversation_name 不再从前端接收，由AI自动生成
         
         # 获取分析器实例以清空表列表
         api_key = user_data.get('api_key')
@@ -584,7 +584,7 @@ def create_new_conversation(user_data):
         
         # 创建新对话
         conversation_info = history_manager.create_new_conversation(
-            user_data, conversation_name, description, analyzer
+            user_data, None, description, analyzer  # conversation_name设为None，将使用默认值"新对话"
         )
         
         return jsonify({

@@ -50,9 +50,9 @@
         <div style="display: flex; gap: 20px; margin-bottom: 15px;">
             <div style="flex: 1;">
                 <h3>创建新对话</h3>
-                <label>对话名称: <input type="text" id="newConversationName" placeholder="输入对话名称"></label><br><br>
-                <label>对话描述: <input type="text" id="newConversationDesc" placeholder="输入对话描述"></label><br><br>
+                <label>对话描述: <input type="text" id="newConversationDesc" placeholder="可选：输入对话描述"></label><br><br>
                 <button onclick="createNewConversation()">创建新对话</button>
+                <p style="color: #666; font-size: 12px; margin-top: 5px;">💡 对话标题将在您发送第一条消息时由AI自动生成</p>
             </div>
             <div style="flex: 1;">
                 <h3>当前对话</h3>
@@ -1084,13 +1084,11 @@
         // 对话管理相关API
         async function createNewConversation() {
             try {
-                const conversationName = document.getElementById('newConversationName').value.trim();
                 const description = document.getElementById('newConversationDesc').value.trim();
                 const response = await fetch('http://localhost:5000/api/conversations/create', {
                     method: 'POST',
                     headers: getHeaders(),
                     body: JSON.stringify({
-                        conversation_name: conversationName || undefined,
                         description: description || undefined
                     })
                 });
