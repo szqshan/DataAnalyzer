@@ -594,3 +594,82 @@ class DatabaseAnalyzer:
                 "error": f"分析失败: {str(e)}",
                 "conversation_id": conversation_id
             }
+    
+    def delete_table(self, table_name: str) -> Dict[str, Any]:
+        """
+        删除指定的数据表
+        
+        Args:
+            table_name: 要删除的表名
+            
+        Returns:
+            包含操作结果的字典
+        """
+        if not self.current_db_path:
+            return {
+                "success": False,
+                "message": "未连接到数据库"
+            }
+        
+        if not table_name:
+            return {
+                "success": False,
+                "message": "表名不能为空"
+            }
+        
+        try:
+            conn = sqlite3.connect(self.current_db_path)
+            cursor = conn.cursor()
+            
+            # 首先检查表是否存在
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name = ? AND name NOT LIKE 'sqlite_%' AND name != '_db_info'
+            """, (table_name,))
+            
+            table_exists = cursor.fetchone()
+            if not table_exists:
+                conn.close()
+                return {
+                    "success": False,
+                    "message": f"表 '{table_name}' 不存在"
+                }
+            
+            # 获取表的行数（用于返回删除信息）
+            cursor.execute(f"SELECT COUNT(*) FROM `{table_name}`")
+            row_count = cursor.fetchone()[0]
+            
+            # 删除表
+            cursor.execute(f"DROP TABLE IF EXISTS `{table_name}`")
+            conn.commit()
+            
+            # 从conversation_tables列表中移除该表
+            self.conversation_tables = [
+                table for table in self.conversation_tables 
+                if table["table_name"] != table_name
+            ]
+            
+            # 如果删除的是当前表，更新current_table_name
+            if self.current_table_name == table_name:
+                if self.conversation_tables:
+                    self.current_table_name = self.conversation_tables[-1]["table_name"]
+                else:
+                    self.current_table_name = None
+            
+            conn.close()
+            
+            print(f"🗑️ 已删除表: {table_name} (包含 {row_count} 行数据)")
+            
+            return {
+                "success": True,
+                "message": f"表 '{table_name}' 删除成功",
+                "deleted_table": table_name,
+                "deleted_rows": row_count,
+                "remaining_tables": len(self.conversation_tables)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"删除表失败: {str(e)}"
+            }

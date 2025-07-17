@@ -281,6 +281,65 @@ def get_tables_info(user_data):
             "user_info": user_data
         }), 500
 
+@app.route('/api/tables/delete', methods=['POST'])
+@require_user
+def delete_table(user_data):
+    """删除指定的数据库表"""
+    try:
+        print(f"🗑️ 用户 {user_data['username']} 请求删除数据表...")
+        
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({"success": False, "message": "未提供API密钥"}), 400
+        
+        analyzer = get_user_analyzer(user_data, api_key)
+        
+        # 获取请求数据
+        data = request.get_json()
+        if not data or 'table_name' not in data:
+            return jsonify({
+                "success": False,
+                "message": "缺少表名参数"
+            }), 400
+        
+        table_name = data['table_name'].strip()
+        if not table_name:
+            return jsonify({
+                "success": False,
+                "message": "表名不能为空"
+            }), 400
+        
+        # 执行删除操作
+        result = analyzer.delete_table(table_name)
+        
+        if result["success"]:
+            print(f"✅ 表 {table_name} 删除成功")
+            return jsonify({
+                "success": True,
+                "message": result["message"],
+                "data": {
+                    "deleted_table": result["deleted_table"],
+                    "deleted_rows": result["deleted_rows"],
+                    "remaining_tables": result["remaining_tables"]
+                },
+                "user_info": user_data
+            })
+        else:
+            print(f"❌ 表 {table_name} 删除失败: {result['message']}")
+            return jsonify({
+                "success": False,
+                "message": result["message"],
+                "user_info": user_data
+            }), 400
+            
+    except Exception as e:
+        print(f"❌ 删除表操作失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"删除表操作失败: {str(e)}",
+            "user_info": user_data
+        }), 500
+
 @app.route('/api/analyze-stream', methods=['POST'])
 @require_user
 def analyze_data_stream(user_data):

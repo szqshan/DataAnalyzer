@@ -470,8 +470,13 @@
             data.tables.forEach((table, index) => {
                 html += `
                     <div style="margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <h4 style="margin: 0 0 10px 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px;">
-                            📊 表 ${index + 1}: ${table.table_name}
+                        <h4 style="margin: 0 0 10px 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
+                            <span>📊 表 ${index + 1}: ${table.table_name}</span>
+                            <button onclick="deleteTable('${table.table_name}', '${table.original_filename}')" 
+                                    style="padding: 4px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;" 
+                                    title="删除此表">
+                                🗑️ 删除
+                            </button>
                         </h4>
                         <div style="margin-left: 10px; color: #666; font-size: 14px;">
                             <p><strong>📁 原始文件:</strong> ${table.original_filename}</p>
@@ -1300,6 +1305,50 @@
             } catch (error) {
                 alert('删除对话出错: ' + error.message);
                 log('删除对话出错: ' + error.message);
+            }
+        }
+
+        // 删除数据表函数
+        async function deleteTable(tableName, originalFilename) {
+            if (!checkUserAuth()) return;
+            
+            try {
+                // 确认删除操作
+                if (!confirm(`确定要删除数据表"${tableName}"吗？\n\n原始文件: ${originalFilename}\n\n⚠️ 此操作将永久删除表中的所有数据，无法撤销！`)) {
+                    return;
+                }
+                
+                log(`🗑️ 正在删除数据表 ${tableName}...`);
+                
+                const response = await fetch('http://localhost:5000/api/tables/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...getHeaders()
+                    },
+                    body: JSON.stringify({
+                        table_name: tableName
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`✅ 数据表"${tableName}"删除成功！删除了 ${data.data.deleted_rows} 行数据`);
+                    log(`📊 当前会话中还剩余 ${data.data.remaining_tables} 个数据表`);
+                    
+                    // 自动刷新表列表
+                    refreshTablesList();
+                    
+                    // 显示成功消息
+                    alert(`数据表删除成功！\n\n表名: ${data.data.deleted_table}\n删除数据: ${data.data.deleted_rows} 行\n剩余表数: ${data.data.remaining_tables} 个`);
+                } else {
+                    log('❌ 删除数据表失败: ' + data.message);
+                    alert('删除数据表失败: ' + data.message);
+                }
+            } catch (error) {
+                log('❌ 删除数据表出错: ' + error.message);
+                alert('删除数据表出错: ' + error.message);
             }
         }
 
