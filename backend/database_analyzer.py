@@ -11,7 +11,7 @@ import re
 from typing import Dict, List, Optional, Any
 import numpy as np
 from config import Config
-from default_prompts import DefaultPrompts
+from prompts import Prompts
 
 def convert_to_json_serializable(obj):
     """将包含numpy类型的对象转换为JSON可序列化的格式"""
@@ -535,7 +535,7 @@ class DatabaseAnalyzer:
         """使用Claude进行数据分析"""
         try:
             # 构建系统提示词
-            system_prompt = DefaultPrompts.SIMPLE_ANALYZER_SYSTEM_PROMPT.format(
+            system_prompt = Prompts.SIMPLE_ANALYZER_SYSTEM_PROMPT.format(
                 tables_summary=self.get_conversation_tables_summary()
             )
             

@@ -1,6 +1,6 @@
-# 默认 Prompt 模板管理
+# 统一 Prompt 管理
 
-class DefaultPrompts:
+class Prompts:
     # 主分析 Prompt 模板
     # 需要格式化的字段: username, db_path, conversation_name, conversation_id, tables_summary, context_info, query
     ANALYSIS_SYSTEM_PROMPT = """你是专业的数据分析师。请根据用户需求智能分析并决定是否需要查询数据库。

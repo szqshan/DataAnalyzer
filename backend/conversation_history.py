@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional
 import uuid
 import logging
 from config import Config
-from default_prompts import DefaultPrompts
+from prompts import Prompts
 
 class ConversationHistoryManager:
     """对话历史记录管理器 - 存储用户查询历史"""
@@ -951,7 +951,7 @@ class ConversationHistoryManager:
         try:
             import anthropic
             
-            prompt = DefaultPrompts.TITLE_GENERATION_PROMPT.format(user_query=user_query)
+            prompt = Prompts.TITLE_GENERATION_PROMPT.format(user_query=user_query)
             
             client = anthropic.Anthropic(api_key=api_key)
             response = client.messages.create(

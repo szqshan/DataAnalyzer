@@ -22,11 +22,50 @@
       "status": "active",
       "db_path": "data\\user_test_user_001\\test_user_001_20251205_200655_113_conv_20251205_200655_113.db",
       "history_path": "data\\user_test_user_001\\test_user_001_20251205_200655_113_conv_20251205_200655_113_history.db",
+      "message_count": 1,
+      "user_id": "test_user_001",
+      "username": "TestUser"
+    },
+    "conv_20251205_202531_674": {
+      "conversation_id": "conv_20251205_202531_674",
+      "conversation_name": "身份确认-财务",
+      "description": "",
+      "created_time": "2025-12-05T20:25:31.674769",
+      "last_activity": "2025-12-05T20:26:17.473706",
+      "status": "active",
+      "db_path": "data\\user_test_user_001\\test_user_001_20251205_202531_674_conv_20251205_202531_674.db",
+      "history_path": "data\\user_test_user_001\\test_user_001_20251205_202531_674_conv_20251205_202531_674_history.db",
+      "message_count": 1,
+      "user_id": "test_user_001",
+      "username": "TestUser"
+    },
+    "conv_20251205_203059_684": {
+      "conversation_id": "conv_20251205_203059_684",
+      "conversation_name": "数据分析师身份确认",
+      "description": "",
+      "created_time": "2025-12-05T20:30:59.684544",
+      "last_activity": "2025-12-05T20:31:39.617859",
+      "status": "active",
+      "db_path": "data\\user_test_user_001\\test_user_001_20251205_203059_684_conv_20251205_203059_684.db",
+      "history_path": "data\\user_test_user_001\\test_user_001_20251205_203059_684_conv_20251205_203059_684_history.db",
+      "message_count": 1,
+      "user_id": "test_user_001",
+      "username": "TestUser"
+    },
+    "conv_20251205_203302_805": {
+      "conversation_id": "conv_20251205_203302_805",
+      "conversation_name": "数据库访问权限",
+      "description": "",
+      "created_time": "2025-12-05T20:33:02.805425",
+      "last_activity": "2025-12-05T20:33:33.558738",
+      "status": "active",
+      "db_path": "data\\user_test_user_001\\test_user_001_20251205_203302_805_conv_20251205_203302_805.db",
+      "history_path": "data\\user_test_user_001\\test_user_001_20251205_203302_805_conv_20251205_203302_805_history.db",
       "message_count": 0,
       "user_id": "test_user_001",
       "username": "TestUser"
     }
   },
-  "current_conversation_id": "conv_20251205_200655_113",
-  "last_updated": "2025-12-05T20:07:26.741551"
+  "current_conversation_id": "conv_20251205_203302_805",
+  "last_updated": "2025-12-05T20:33:33.558743"
 }

@@ -22,7 +22,7 @@ from conversation_history import ConversationHistoryManager
 
 # 导入配置和Prompt
 from config import Config
-from default_prompts import DefaultPrompts
+from prompts import Prompts
 
 app = Flask(__name__)
 
@@ -47,27 +47,27 @@ def extract_query_from_data(data):
     
     if isinstance(query_raw, str):
         return query_raw.strip()
-    elif isinstance(query_raw, list):
+    
+    if isinstance(query_raw, list):
         # 处理列表情况 - 合并所有非空文本
-        text_parts = []
+        parts = []
         for item in query_raw:
-            if isinstance(item, dict) and 'text' in item:
-                text_parts.append(str(item['text']))
-            elif isinstance(item, str) and item.strip():
-                text_parts.append(item.strip())
-        return ' '.join(text_parts).strip()
-    elif isinstance(query_raw, dict) and 'text' in query_raw:
-        return str(query_raw['text']).strip()
-    else:
-        return str(query_raw).strip()
+            if isinstance(item, dict):
+                parts.append(str(item.get('text', '')).strip())
+            else:
+                parts.append(str(item).strip())
+        return ' '.join(filter(None, parts))
+        
+    if isinstance(query_raw, dict):
+        return str(query_raw.get('text', '')).strip()
+        
+    return str(query_raw).strip()
 
 def get_user_analyzer(user_data, api_key):
     """获取或创建用户专属的分析器实例"""
     user_id = user_data['user_id']
     # 自动strip api_key
     api_key = api_key.strip() if isinstance(api_key, str) else api_key
-    print("[DEBUG] 使用的 api_key:", api_key[:4], "...", api_key[-4:] if api_key else None)
-    print("[DEBUG] api_key repr:", repr(api_key))
     
     # 为每个用户+API Key组合创建唯一标识
     analyzer_key = f"{user_id}_{hash(api_key) % 10000}"
@@ -78,7 +78,6 @@ def get_user_analyzer(user_data, api_key):
         
         # 获取API基础URL
         base_url = os.getenv('ANTHROPIC_BASE_URL')
-        print("[DEBUG] 使用的 base_url:", base_url)
         
         # 验证API密钥有效性
         try:
@@ -94,9 +93,7 @@ def get_user_analyzer(user_data, api_key):
                 max_tokens=10,
                 messages=[{"role": "user", "content": "test"}]
             )
-            print("[DEBUG] API密钥验证成功")
         except Exception as e:
-            print(f"[DEBUG] API密钥验证失败: {str(e)}")
             if "authentication" in str(e).lower() or "api_key" in str(e).lower() or "unauthorized" in str(e).lower():
                 raise ValueError("API密钥无效，请检查您的凭据")
             else:
@@ -115,8 +112,6 @@ def get_user_analyzer(user_data, api_key):
         # 缓存分析器
         user_analyzers[analyzer_key] = analyzer
         
-        print(f"✅ 用户 {user_data['username']} 已连接")
-    
     return user_analyzers[analyzer_key]
 
 def get_user_history_manager(user_data):
@@ -133,8 +128,6 @@ def get_user_history_manager(user_data):
         # 缓存管理器
         user_history_managers[user_id] = history_manager
         
-        print(f"📚 用户 {user_data['username']} 历史记录管理器已初始化")
-    
     return user_history_managers[user_id]
 
 @app.route('/api/status', methods=['GET'])
@@ -188,8 +181,6 @@ def get_status(user_data):
 def upload_csv(user_data):
     """上传CSV文件并导入到用户专属数据库"""
     try:
-        print(f"📤 用户 {user_data['username']} 正在上传文件...")
-        
         api_key = user_data.get('api_key')
         if not api_key:
             return jsonify({"success": False, "message": "未提供API密钥"}), 400
@@ -231,7 +222,6 @@ def upload_csv(user_data):
         
         # 生成动态表名（基于文件名）
         table_name = analyzer._generate_table_name(filename)
-        print(f"📋 生成表名: {table_name} (来源文件: {filename})")
         
         # 导入数据库
         result = analyzer.import_csv_to_sqlite(str(file_path), table_name, user_db_path)
@@ -242,8 +232,6 @@ def upload_csv(user_data):
                 os.remove(str(file_path))
             except:
                 pass
-            
-            print(f"✅ 成功导入 {result.get('rows_imported', 0)} 行数据")
             
             return jsonify({
                 "success": True,
@@ -273,8 +261,6 @@ def upload_csv(user_data):
 def get_tables_info(user_data):
     """获取当前对话中所有表的详细信息"""
     try:
-        print(f"📊 用户 {user_data['username']} 请求获取表信息...")
-        
         api_key = user_data.get('api_key')
         if not api_key:
             return jsonify({"success": False, "message": "未提供API密钥"}), 400
@@ -319,8 +305,6 @@ def get_tables_info(user_data):
 def delete_table(user_data):
     """删除指定的数据库表"""
     try:
-        print(f"🗑️ 用户 {user_data['username']} 请求删除数据表...")
-        
         api_key = user_data.get('api_key')
         if not api_key:
             return jsonify({"success": False, "message": "未提供API密钥"}), 400
@@ -346,7 +330,6 @@ def delete_table(user_data):
         result = analyzer.delete_table(table_name)
         
         if result["success"]:
-            print(f"✅ 表 {table_name} 删除成功")
             return jsonify({
                 "success": True,
                 "message": result["message"],
@@ -358,7 +341,6 @@ def delete_table(user_data):
                 "user_info": user_data
             })
         else:
-            print(f"❌ 表 {table_name} 删除失败: {result['message']}")
             return jsonify({
                 "success": False,
                 "message": result["message"],
@@ -382,12 +364,8 @@ def analyze_data_stream(user_data):
         query = extract_query_from_data(data)
         conversation_id = data.get('conversation_id')
         
-        print(f"🔍 收到查询请求 - 原始数据类型: {type(data.get('query'))}, 处理后query: '{query}'")
-        
         if not query:
             return jsonify({"success": False, "message": "查询内容不能为空"}), 400
-        
-        print(f"🔍 用户 {user_data['username']} 开始分析: {query}")
         
         api_key = user_data.get('api_key')
         if not api_key:
@@ -415,14 +393,6 @@ def analyze_data_stream(user_data):
                 
                 current_conversation = history_manager.get_current_conversation_info()
                 
-                # 调试信息：打印当前对话状态
-                if current_conversation:
-                    messages_count = len(current_conversation.get('messages', []))
-                    print(f"📚 当前对话: {current_conversation['conversation_name']}")
-                    print(f"📚 已有消息数量: {messages_count}")
-                    if messages_count > 0:
-                        print(f"📚 最后一条消息角色: {current_conversation['messages'][-1].get('role', '未知')}")
-                
                 # 获取历史对话上下文（当前对话内的历史）
                 recent_conversations = history_manager.get_recent_conversations(user_data['user_id'], 3)
                 context_info = ""
@@ -437,7 +407,6 @@ def analyze_data_stream(user_data):
                 
                 # 发送开始分析消息
                 start_msg = f'🚀 开始智能分析数据... (当前对话: {current_conversation["conversation_name"]})'
-                print(f"\n{start_msg}")
                 yield f"data: {json.dumps({'type': 'status', 'message': start_msg})}\n\n"
                 
                 # 构建系统提示词
@@ -459,14 +428,11 @@ def analyze_data_stream(user_data):
                     # 如果前端提供了Prompt，尝试格式化它
                     try:
                         system_prompt = custom_system_prompt.format(**format_args)
-                        print("✅ 使用前端自定义 System Prompt (格式化成功)")
                     except Exception as e:
                         # 如果格式化失败，追加上下文信息
                         system_prompt = custom_system_prompt + f"\n\n当前数据库表信息：\n{tables_summary}\n\n可用工具：\n- get_table_info: 获取当前对话中所有表的结构信息\n- query_database: 执行SQL查询获取数据，支持多表查询"
-                        print(f"⚠️ 前端自定义 System Prompt 格式化失败或不需要格式化: {e}，已追加基础上下文信息")
                 else:
-                    system_prompt = DefaultPrompts.ANALYSIS_SYSTEM_PROMPT.format(**format_args)
-                    print("ℹ️ 使用默认 System Prompt")
+                    system_prompt = Prompts.ANALYSIS_SYSTEM_PROMPT.format(**format_args)
                 
                 # 仅首次分析时插入主记录
                 from backend.conversation_history import sqlite3
@@ -484,7 +450,6 @@ def analyze_data_stream(user_data):
                 
                 # 初始化消息历史
                 messages = current_conversation.get('messages', [])
-                print(f"📚 加载到 {len(messages)} 条历史消息")
                 
                 # 追加本轮用户消息
                 from datetime import datetime
@@ -516,9 +481,6 @@ def analyze_data_stream(user_data):
                     # 如果数据库里没有（可能是旧数据），使用当前计算的
                     current_system_prompt = system_prompt
                 
-                print(f"📚 添加新用户消息，当前总消息数: {len(messages)}")
-                print(f"🧠 使用的 System Prompt 长度: {len(current_system_prompt)}")
-                
                 max_iterations = Config.MAX_ITERATIONS
                 iteration = 0
                 while iteration < max_iterations:
@@ -526,7 +488,6 @@ def analyze_data_stream(user_data):
                     has_tool_calls = False
                     
                     status_msg = f'🔄 第{iteration}轮分析...'
-                    print(f"\n{status_msg}")
                     yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
                     try:
                         response = analyzer.client.messages.create(
@@ -557,7 +518,6 @@ def analyze_data_stream(user_data):
                                     has_tool_calls = True
                                     
                                     tool_msg = f'🔧 调用工具: {chunk.content_block.name}'
-                                    print(f"\n{tool_msg}")
                                     yield f"data: {json.dumps({'type': 'status', 'message': tool_msg})}\n\n"
                             elif chunk.type == "content_block_delta":
                                 if chunk.delta.type == "text_delta":
@@ -565,7 +525,6 @@ def analyze_data_stream(user_data):
                                     if assistant_message["content"] and assistant_message["content"][-1].get("type") == "text":
                                         assistant_message["content"][-1]["text"] += text_content
                                     
-                                    print(text_content, end='', flush=True)
                                     yield f"data: {json.dumps({'type': 'ai_response', 'content': text_content})}\n\n"
                                 elif chunk.delta.type == "input_json_delta":
                                     if assistant_message["content"] and assistant_message["content"][-1].get("type") == "tool_use":
@@ -582,7 +541,6 @@ def analyze_data_stream(user_data):
                                         except json.JSONDecodeError:
                                             assistant_message["content"][-1]["input"] = {}
                             elif chunk.type == "message_stop":
-                                print()
                                 break
                         # 使用append_message方法添加AI消息并获取消息ID
                         ai_message_id = history_manager.append_message(
@@ -622,12 +580,10 @@ def analyze_data_stream(user_data):
                                         })
                                         
                                         complete_msg = f'✅ 工具 {tool_name} 执行完成'
-                                        print(f"\n{complete_msg}")
                                         yield f"data: {json.dumps({'type': 'status', 'message': complete_msg})}\n\n"
                                         yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'result': result})}\n\n"
                                     except Exception as tool_error:
                                         error_msg = f'工具执行失败: {str(tool_error)}'
-                                        print(f"\n❌ {error_msg}")
                                         yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
                             if tool_results:
                                 # 使用append_message方法添加工具结果消息
@@ -647,13 +603,11 @@ def analyze_data_stream(user_data):
                         else:
                             # 分析完成
                             complete_msg = f'✅ 分析完成！ (对话: {current_conversation["conversation_name"]})'
-                            print(f"\n{complete_msg}")
                             
                             yield f"data: {json.dumps({'type': 'status', 'message': complete_msg})}\n\n"
                             break
                     except Exception as api_error:
                         error_msg = f'API调用错误: {str(api_error)}'
-                        print(f"\n❌ {error_msg}")
                         yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
                         
                         # 记录错误状态
@@ -662,7 +616,6 @@ def analyze_data_stream(user_data):
                         break
                 if iteration >= max_iterations:
                     error_msg = '达到最大迭代次数限制'
-                    print(f"\n❌ {error_msg}")
                     yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
                     
                     # 记录中断状态
@@ -670,7 +623,6 @@ def analyze_data_stream(user_data):
                         history_manager.complete_conversation(current_conversation['conversation_id'], 'interrupted', error_msg, iteration)
             except Exception as e:
                 error_msg = f'分析过程错误: {str(e)}'
-                print(f"\n❌ {error_msg}")
                 yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
                 
                 # 记录错误状态

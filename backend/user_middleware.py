@@ -5,7 +5,6 @@ import os
 from datetime import datetime
 from functools import wraps
 from flask import request, jsonify
-import hashlib
 import time
 import urllib.parse
 import re
@@ -16,7 +15,6 @@ class UserManager:
     def __init__(self, base_data_dir="data"):
         self.base_data_dir = Path(base_data_dir)
         self.base_data_dir.mkdir(exist_ok=True)
-        print(f"✅ 用户管理器初始化完成 - 仅支持付费用户模式")
     
     def get_user_from_request(self, request, use_default=False):
         """从请求中提取用户信息 - 可选择使用默认用户"""
@@ -84,7 +82,6 @@ class UserManager:
                 user_id = 'default_user'
                 username = '数据分析用户'
                 api_key = default_api_key
-                print("[DEBUG] 使用默认用户信息")
         
         # 验证必要字段
         if not user_id or not api_key:
@@ -102,7 +99,6 @@ class UserManager:
             'is_guest': False,  # 不再支持访客模式
             'api_key': api_key
         }
-        print("[DEBUG] get_user_from_request 返回 user_info:", user_info)
         return user_info
     
     def _safe_username(self, username):
@@ -171,17 +167,14 @@ def require_user(f):
         try:
             # 获取用户信息
             user_info = user_manager.get_user_from_request(request)
-            print("[DEBUG] require_user: user_info =", user_info)
             # 验证用户信息 - 必须有user_id和api_key
             if not user_info:
-                print("[DEBUG] require_user: 校验失败，user_info =", user_info)
                 return jsonify({
                     "success": False, 
                     "message": "需要提供有效的用户ID和API Key",
                     "error_code": "MISSING_CREDENTIALS"
                 }), 401
             if not user_info.get('user_id') or not user_info.get('api_key'):
-                print("[DEBUG] require_user: 校验失败，user_info =", user_info)
                 return jsonify({
                     "success": False, 
                     "message": "用户ID和API Key不能为空",
@@ -190,7 +183,6 @@ def require_user(f):
             # 将用户信息传递给路由函数
             return f(user_info, *args, **kwargs)
         except Exception as e:
-            print("[DEBUG] require_user: 异常", e)
             return jsonify({
                 "success": False, 
                 "message": f"用户身份识别失败: {str(e)}",
@@ -205,11 +197,9 @@ def allow_default_user(f):
         try:
             # 获取用户信息，允许使用默认用户
             user_info = user_manager.get_user_from_request(request, use_default=True)
-            print("[DEBUG] allow_default_user: user_info =", user_info)
             
             # 如果仍然没有用户信息，返回错误
             if not user_info:
-                print("[DEBUG] allow_default_user: 无法获取用户信息")
                 return jsonify({
                     "success": False, 
                     "message": "无法获取用户信息，请检查环境配置",
@@ -219,7 +209,6 @@ def allow_default_user(f):
             # 将用户信息传递给路由函数
             return f(user_info, *args, **kwargs)
         except Exception as e:
-            print("[DEBUG] allow_default_user: 异常", e)
             return jsonify({
                 "success": False, 
                 "message": f"用户身份识别失败: {str(e)}",
