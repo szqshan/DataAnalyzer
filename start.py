@@ -65,7 +65,7 @@ def check_project_structure():
     """检查项目结构"""
     required_files = [
         'backend/user_middleware.py',
-        'backend/datatest1_7_5.py',
+        'backend/database_analyzer.py',
         'test_frontend.html'
     ]
     

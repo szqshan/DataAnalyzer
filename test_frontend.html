@@ -104,6 +104,11 @@
         <label>分析查询: 
             <textarea id="analysisQuery" rows="3" cols="80" placeholder="输入你的数据分析需求，例如：分析数据的基本统计信息并生成详细的HTML报告">给我个报告</textarea>
         </label><br><br>
+        
+        <label>System Prompt (可选): 
+            <textarea id="systemPrompt" rows="3" cols="80" placeholder="输入自定义System Prompt，例如：你是一个说话尖酸刻薄的财务审计..."></textarea>
+        </label><br><br>
+        
         <button onclick="startMultiTurnChat()" id="analyzeBtn">开始多轮对话（包含富文本）</button>
         <button onclick="stopAnalysis()" id="stopBtn" disabled>停止分析</button><br><br>
         
@@ -613,6 +618,8 @@
             if (!checkUserAuth()) return;
             
             const query = document.getElementById('analysisQuery').value.trim();
+            const systemPrompt = document.getElementById('systemPrompt').value.trim();
+            
             if (!query) {
                 alert('请输入您的问题或需求');
                 return;
@@ -654,12 +661,13 @@
                 const response = await fetch('http://localhost:5000/api/analyze-stream', {
                     method: 'POST',
                     headers: streamHeaders,
-                                    body: JSON.stringify({ 
-                    query: query,
-                    userId: currentUserId,
-                    username: currentUsername,
-                    conversation_id: currentConversationId
-                })
+                    body: JSON.stringify({ 
+                        query: query,
+                        system_prompt: systemPrompt || undefined,
+                        userId: currentUserId,
+                        username: currentUsername,
+                        conversation_id: currentConversationId
+                    })
                 });
 
                 if (!response.ok) {

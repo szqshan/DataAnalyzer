@@ -1,5 +1,5 @@
 # P1精简版数据库分析器 - 多表支持版本
-# 版本: 2.1.0 - 支持多个CSV文件上传和分析
+# 版本: 2.2.0 - 结构化重构版本
 
 from anthropic import Anthropic
 import sqlite3
@@ -10,6 +10,8 @@ import json
 import re
 from typing import Dict, List, Optional, Any
 import numpy as np
+from config import Config
+from default_prompts import DefaultPrompts
 
 def convert_to_json_serializable(obj):
     """将包含numpy类型的对象转换为JSON可序列化的格式"""
@@ -33,7 +35,7 @@ def convert_to_json_serializable(obj):
 class DatabaseAnalyzer:
     """P1精简版数据库分析器类 - 专注多表CSV分析功能"""
     
-    def __init__(self, api_key, model_name="claude-sonnet-4-20250514", base_url=None):
+    def __init__(self, api_key, model_name=Config.DEFAULT_MODEL_NAME, base_url=None):
         """
         初始化数据库分析器
         
@@ -533,24 +535,9 @@ class DatabaseAnalyzer:
         """使用Claude进行数据分析"""
         try:
             # 构建系统提示词
-            system_prompt = f"""你是一个专业的数据分析师，专门帮助用户分析SQLite数据库中的数据。
-
-当前数据库信息：
-{self.get_conversation_tables_summary()}
-
-你有以下工具可以使用：
-1. query_database: 执行SQL查询获取数据
-2. get_table_info: 获取表结构信息
-
-请根据用户的问题，使用合适的工具进行数据分析，并提供清晰、准确的分析结果。
-支持多表查询，可以使用JOIN、UNION等SQL操作进行跨表分析。
-
-注意：
-- 在SQL查询中使用反引号包围表名，如 `table_name`
-- 提供具体的数据洞察和建议
-- 如果需要多个查询，请分步骤进行
-- 确保查询结果的准确性和完整性
-"""
+            system_prompt = DefaultPrompts.SIMPLE_ANALYZER_SYSTEM_PROMPT.format(
+                tables_summary=self.get_conversation_tables_summary()
+            )
             
             # 构建消息
             messages = [

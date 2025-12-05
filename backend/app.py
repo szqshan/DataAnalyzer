@@ -15,10 +15,14 @@ load_dotenv()
 from user_middleware import user_manager, require_user, allow_default_user, get_current_user
 
 # 导入分析器类
-from datatest1_7_5 import DatabaseAnalyzer
+from database_analyzer import DatabaseAnalyzer
 
 # 导入对话历史记录管理器
 from conversation_history import ConversationHistoryManager
+
+# 导入配置和Prompt
+from config import Config
+from default_prompts import DefaultPrompts
 
 app = Flask(__name__)
 
@@ -31,7 +35,7 @@ app.logger.setLevel(logging.ERROR)
 CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 
 # 配置
-app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB最大文件大小
+app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH  # 100MB最大文件大小
 
 # 用户分析器和历史记录管理器实例缓存
 user_analyzers = {}
@@ -394,6 +398,7 @@ def analyze_data_stream(user_data):
         
         if not analyzer.current_db_path:
             return jsonify({"success": False, "message": "请先上传数据文件"}), 400
+            
         def generate_stream():
             tool_calls = []
             try:
@@ -402,10 +407,12 @@ def analyze_data_stream(user_data):
                     error_msg = "请先创建或选择一个对话"
                     yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
                     return
+                
                 # 支持前端传入conversation_id
                 if conversation_id and conversation_id != history_manager.current_conversation_id:
                     # 切换到指定对话
                     history_manager.switch_conversation(conversation_id, user_data['user_id'])
+                
                 current_conversation = history_manager.get_current_conversation_info()
                 
                 # 调试信息：打印当前对话状态
@@ -427,25 +434,54 @@ def analyze_data_stream(user_data):
                             context_info += f"   结果摘要: {conv['analysis_summary'][:100]}...\n"
                         context_info += f"   时间: {conv['start_time'][:19]}\n"
                         context_info += f"   对话: {conv.get('conversation_name', '未知对话')}\n\n"
+                
                 # 发送开始分析消息
                 start_msg = f'🚀 开始智能分析数据... (当前对话: {current_conversation["conversation_name"]})'
                 print(f"\n{start_msg}")
                 yield f"data: {json.dumps({'type': 'status', 'message': start_msg})}\n\n"
+                
                 # 构建系统提示词
                 tables_summary = analyzer.get_conversation_tables_summary()
-                system_prompt = f"""你是专业的数据分析师。请根据用户需求智能分析并决定是否需要查询数据库。\n\n**分析流程：**\n1. 首先分析用户的具体需求\n2. 检查历史对话中是否已有相关信息\n3. 判断当前已有的信息是否足够回答用户问题\n4. 如果已有信息不足，则调用 get_table_info 获取表结构，然后执行相应的SQL查询\n5. 如果已有信息足够，直接基于已有信息进行分析和回答\n6. 回答问题前，适当的夸奖用户提供的数据或提出精彩问题\n\n**重要原则：**\n- 优先使用历史对话中的已有信息\n- 避免重复查询已知信息\n- 只在必要时调用数据库查询工具\n- 确保回答准确、完整、有用\n- 如果用户询问的是之前分析过的内容，直接引用历史结果\n- 绝对禁用类似SELECT * FROM table_name这种返回大量信息的命令，尽量使用统计类命令\n- 如果无法完成用户需求，请直接告诉用户无法完成，不要编造数据\n- 告诉用户你的查询过程\n- 根据用户提供的信息，如果缺少必要的信息，你可以质疑用户的需求，但不要直接拒绝\n- 如果用户提供的信息不准确，你可以质疑用户的需求，但不要直接拒绝\n- 如果用户的问题不明确，你需要询问一下用户，不要胡乱分析\n\n**多表支持说明：**\n- 当前对话支持多个数据表，可以进行跨表分析\n- 使用JOIN等SQL语句可以关联多个表进行分析\n- 在查询时请明确指定表名，避免歧义\n- 可以比较不同表的数据，寻找关联性和差异\n\n**可用工具：**\n- get_table_info: 获取当前对话中所有表的结构信息\n- query_database: 执行SQL查询获取数据，支持多表查询\n\n**当前上下文：**\n- 用户: {user_data['username']}\n- 数据库: {analyzer.current_db_path}\n- 当前对话: {current_conversation['conversation_name']}\n- 对话ID: {current_conversation['conversation_id']}\n\n**当前对话中的数据表：**\n{tables_summary}\n\n{context_info}\n**当前用户需求:** {query}\n\n请根据以上原则和历史上下文，智能判断是否需要查询数据库，然后提供专业的分析回答。如果历史对话中已有相关信息，请优先使用并适当引用。如果有多个表，可以进行跨表分析和比较。"""
+                custom_system_prompt = data.get('system_prompt')
+                
+                # 准备格式化参数
+                format_args = {
+                    "username": user_data['username'],
+                    "db_path": analyzer.current_db_path,
+                    "conversation_name": current_conversation['conversation_name'],
+                    "conversation_id": current_conversation['conversation_id'],
+                    "tables_summary": tables_summary,
+                    "context_info": context_info,
+                    "query": query
+                }
+                
+                if custom_system_prompt:
+                    # 如果前端提供了Prompt，尝试格式化它
+                    try:
+                        system_prompt = custom_system_prompt.format(**format_args)
+                        print("✅ 使用前端自定义 System Prompt (格式化成功)")
+                    except Exception as e:
+                        # 如果格式化失败，追加上下文信息
+                        system_prompt = custom_system_prompt + f"\n\n当前数据库表信息：\n{tables_summary}\n\n可用工具：\n- get_table_info: 获取当前对话中所有表的结构信息\n- query_database: 执行SQL查询获取数据，支持多表查询"
+                        print(f"⚠️ 前端自定义 System Prompt 格式化失败或不需要格式化: {e}，已追加基础上下文信息")
+                else:
+                    system_prompt = DefaultPrompts.ANALYSIS_SYSTEM_PROMPT.format(**format_args)
+                    print("ℹ️ 使用默认 System Prompt")
+                
                 # 仅首次分析时插入主记录
                 from backend.conversation_history import sqlite3
                 with sqlite3.connect(history_manager.db_path) as conn:
                     cursor = conn.cursor()
                     cursor.execute('SELECT COUNT(*) FROM conversation_history WHERE conversation_id = ?', (current_conversation['conversation_id'],))
                     exists = cursor.fetchone()[0]
+                
                 if not exists:
                     # 插入主记录
                     history_manager.start_conversation(
                         user_data, query, system_prompt, 
                         analyzer.current_db_path, analyzer.current_table_name
                     )
+                
                 # 初始化消息历史
                 messages = current_conversation.get('messages', [])
                 print(f"📚 加载到 {len(messages)} 条历史消息")
@@ -472,8 +508,18 @@ def analyze_data_stream(user_data):
                 # 重新获取完整的消息历史（包含新添加的用户消息）
                 current_conversation = history_manager.get_current_conversation_info()
                 messages = current_conversation.get('messages', [])
+                
+                # 确保获取到 System Prompt
+                if 'system_prompt' in current_conversation and current_conversation['system_prompt']:
+                    current_system_prompt = current_conversation['system_prompt']
+                else:
+                    # 如果数据库里没有（可能是旧数据），使用当前计算的
+                    current_system_prompt = system_prompt
+                
                 print(f"📚 添加新用户消息，当前总消息数: {len(messages)}")
-                max_iterations = 100
+                print(f"🧠 使用的 System Prompt 长度: {len(current_system_prompt)}")
+                
+                max_iterations = Config.MAX_ITERATIONS
                 iteration = 0
                 while iteration < max_iterations:
                     iteration += 1
@@ -487,6 +533,7 @@ def analyze_data_stream(user_data):
                             model=analyzer.model_name,
                             max_tokens=40000,
                             messages=messages,
+                            system=current_system_prompt,  # 🔥 关键修复：传递 system 参数
                             tools=analyzer.tools,
                             stream=True
                         )

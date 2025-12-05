@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 import uuid
 import logging
+from config import Config
+from default_prompts import DefaultPrompts
 
 class ConversationHistoryManager:
     """对话历史记录管理器 - 存储用户查询历史"""
@@ -216,29 +218,33 @@ class ConversationHistoryManager:
         if self.current_conversation_id and self.current_conversation_id in self.conversations_meta['conversations']:
             conv_info = self.conversations_meta['conversations'][self.current_conversation_id].copy()
             
-            # 从数据库加载消息历史
+            # 从数据库加载消息历史和System Prompt
             try:
                 if hasattr(self, 'db_path') and self.db_path and Path(self.db_path).exists():
                     with sqlite3.connect(self.db_path) as conn:
                         cursor = conn.cursor()
                         cursor.execute('''
-                            SELECT messages FROM conversation_history 
+                            SELECT messages, system_prompt FROM conversation_history 
                             WHERE conversation_id = ?
                         ''', (self.current_conversation_id,))
                         result = cursor.fetchone()
                         
-                        if result and result[0]:
-                            conv_info['messages'] = json.loads(result[0])
-                            logging.info(f"📚 已加载 {len(conv_info['messages'])} 条消息历史")
+                        if result:
+                            conv_info['messages'] = json.loads(result[0]) if result[0] else []
+                            conv_info['system_prompt'] = result[1]
+                            logging.info(f"📚 已加载 {len(conv_info['messages'])} 条消息历史和 System Prompt")
                         else:
                             conv_info['messages'] = []
+                            conv_info['system_prompt'] = None
                             logging.info(f"📚 当前对话暂无消息历史")
                 else:
                     conv_info['messages'] = []
+                    conv_info['system_prompt'] = None
                     logging.warning(f"📚 数据库路径不存在，无法加载消息历史")
             except Exception as e:
                 logging.error(f"❌ 加载消息历史失败: {e}")
                 conv_info['messages'] = []
+                conv_info['system_prompt'] = None
             
             return conv_info
         return None
@@ -945,21 +951,11 @@ class ConversationHistoryManager:
         try:
             import anthropic
             
-            prompt = f"""请为以下数据分析查询生成一个简短、准确的标题（不超过16个字符）：
-
-用户查询：{user_query}
-
-要求：
-1. 简洁明了，突出核心内容
-2. 中文输出
-3. 不要使用"分析"、"查询"、"请"等冗余词汇
-4. 直接返回标题，不要其他内容
-
-请直接返回标题："""
+            prompt = DefaultPrompts.TITLE_GENERATION_PROMPT.format(user_query=user_query)
             
             client = anthropic.Anthropic(api_key=api_key)
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=Config.TITLE_GENERATION_MODEL,
                 max_tokens=50,
                 messages=[{"role": "user", "content": prompt}]
             )
