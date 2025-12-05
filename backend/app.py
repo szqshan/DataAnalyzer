@@ -378,7 +378,6 @@ def analyze_data_stream(user_data):
             return jsonify({"success": False, "message": "请先上传数据文件"}), 400
             
         def generate_stream():
-            tool_calls = []
             try:
                 # 检查是否有当前对话，如果没有则返回错误
                 if not history_manager.current_conversation_id:
@@ -481,146 +480,16 @@ def analyze_data_stream(user_data):
                     # 如果数据库里没有（可能是旧数据），使用当前计算的
                     current_system_prompt = system_prompt
                 
-                max_iterations = Config.MAX_ITERATIONS
-                iteration = 0
-                while iteration < max_iterations:
-                    iteration += 1
-                    has_tool_calls = False
+                # 执行分析循环
+                for event in analyzer.run_analysis_loop(
+                    messages=messages,
+                    system_prompt=current_system_prompt,
+                    history_manager=history_manager,
+                    current_conversation=current_conversation,
+                    max_iterations=Config.MAX_ITERATIONS
+                ):
+                    yield f"data: {json.dumps(event)}\n\n"
                     
-                    status_msg = f'🔄 第{iteration}轮分析...'
-                    yield f"data: {json.dumps({'type': 'status', 'message': status_msg})}\n\n"
-                    try:
-                        response = analyzer.client.messages.create(
-                            model=analyzer.model_name,
-                            max_tokens=40000,
-                            messages=messages,
-                            system=current_system_prompt,  # 🔥 关键修复：传递 system 参数
-                            tools=analyzer.tools,
-                            stream=True
-                        )
-                        assistant_message = {"role": "assistant", "content": []}
-                        current_tool_inputs = {}
-                        for chunk in response:
-                            if chunk.type == "message_start":
-                                continue
-                            elif chunk.type == "content_block_start":
-                                if chunk.content_block.type == "text":
-                                    assistant_message["content"].append({"type": "text", "text": ""})
-                                elif chunk.content_block.type == "tool_use":
-                                    tool_block = {
-                                        "type": "tool_use",
-                                        "id": chunk.content_block.id,
-                                        "name": chunk.content_block.name,
-                                        "input": {}
-                                    }
-                                    assistant_message["content"].append(tool_block)
-                                    current_tool_inputs[chunk.content_block.id] = ""
-                                    has_tool_calls = True
-                                    
-                                    tool_msg = f'🔧 调用工具: {chunk.content_block.name}'
-                                    yield f"data: {json.dumps({'type': 'status', 'message': tool_msg})}\n\n"
-                            elif chunk.type == "content_block_delta":
-                                if chunk.delta.type == "text_delta":
-                                    text_content = chunk.delta.text
-                                    if assistant_message["content"] and assistant_message["content"][-1].get("type") == "text":
-                                        assistant_message["content"][-1]["text"] += text_content
-                                    
-                                    yield f"data: {json.dumps({'type': 'ai_response', 'content': text_content})}\n\n"
-                                elif chunk.delta.type == "input_json_delta":
-                                    if assistant_message["content"] and assistant_message["content"][-1].get("type") == "tool_use":
-                                        tool_id = assistant_message["content"][-1]["id"]
-                                        if tool_id in current_tool_inputs:
-                                            current_tool_inputs[tool_id] += chunk.delta.partial_json
-                            elif chunk.type == "content_block_stop":
-                                if assistant_message["content"] and assistant_message["content"][-1].get("type") == "tool_use":
-                                    tool_id = assistant_message["content"][-1]["id"]
-                                    if tool_id in current_tool_inputs:
-                                        try:
-                                            complete_input = json.loads(current_tool_inputs[tool_id])
-                                            assistant_message["content"][-1]["input"] = complete_input
-                                        except json.JSONDecodeError:
-                                            assistant_message["content"][-1]["input"] = {}
-                            elif chunk.type == "message_stop":
-                                break
-                        # 使用append_message方法添加AI消息并获取消息ID
-                        ai_message_id = history_manager.append_message(
-                            current_conversation['conversation_id'], 
-                            "assistant", 
-                            assistant_message["content"]
-                        )
-                        
-                        # 发送AI消息ID给前端
-                        if ai_message_id:
-                            yield f"data: {json.dumps({'type': 'ai_message_id', 'message_id': ai_message_id})}\n\n"
-                        
-                        # 重新获取完整的消息历史
-                        current_conversation = history_manager.get_current_conversation_info()
-                        messages = current_conversation.get('messages', [])
-                        # 执行工具调用
-                        if has_tool_calls:
-                            tool_results = []
-                            for content_block in assistant_message["content"]:
-                                if content_block.get("type") == "tool_use":
-                                    tool_name = content_block["name"]
-                                    tool_input = content_block["input"]
-                                    tool_id = content_block["id"]
-                                    try:
-                                        result = analyzer.execute_tool(tool_name, tool_input)
-                                        tool_call_record = {
-                                            "tool_name": tool_name,
-                                            "tool_input": tool_input,
-                                            "tool_result": result,
-                                            "execution_time": datetime.now().isoformat()
-                                        }
-                                        tool_calls.append(tool_call_record)
-                                        tool_results.append({
-                                            "type": "tool_result",
-                                            "tool_use_id": tool_id,
-                                            "content": json.dumps(result, ensure_ascii=False, indent=2)
-                                        })
-                                        
-                                        complete_msg = f'✅ 工具 {tool_name} 执行完成'
-                                        yield f"data: {json.dumps({'type': 'status', 'message': complete_msg})}\n\n"
-                                        yield f"data: {json.dumps({'type': 'tool_result', 'tool': tool_name, 'result': result})}\n\n"
-                                    except Exception as tool_error:
-                                        error_msg = f'工具执行失败: {str(tool_error)}'
-                                        yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
-                            if tool_results:
-                                # 使用append_message方法添加工具结果消息
-                                tool_message_id = history_manager.append_message(
-                                    current_conversation['conversation_id'], 
-                                    "user", 
-                                    tool_results
-                                )
-                                
-                                # 重新获取完整的消息历史
-                                current_conversation = history_manager.get_current_conversation_info()
-                                messages = current_conversation.get('messages', [])
-                            # 更新工具调用记录
-                            if current_conversation['conversation_id'] and tool_calls:
-                                history_manager.update_tool_calls(current_conversation['conversation_id'], tool_calls)
-                            continue
-                        else:
-                            # 分析完成
-                            complete_msg = f'✅ 分析完成！ (对话: {current_conversation["conversation_name"]})'
-                            
-                            yield f"data: {json.dumps({'type': 'status', 'message': complete_msg})}\n\n"
-                            break
-                    except Exception as api_error:
-                        error_msg = f'API调用错误: {str(api_error)}'
-                        yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
-                        
-                        # 记录错误状态
-                        if current_conversation['conversation_id']:
-                            history_manager.complete_conversation(current_conversation['conversation_id'], 'error', error_msg, iteration)
-                        break
-                if iteration >= max_iterations:
-                    error_msg = '达到最大迭代次数限制'
-                    yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
-                    
-                    # 记录中断状态
-                    if current_conversation['conversation_id']:
-                        history_manager.complete_conversation(current_conversation['conversation_id'], 'interrupted', error_msg, iteration)
             except Exception as e:
                 error_msg = f'分析过程错误: {str(e)}'
                 yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
@@ -628,6 +497,7 @@ def analyze_data_stream(user_data):
                 # 记录错误状态
                 if history_manager.current_conversation_id:
                     history_manager.complete_conversation(history_manager.current_conversation_id, 'error', error_msg, 0)
+                    
         return Response(
             stream_with_context(generate_stream()),
             mimetype='text/event-stream',

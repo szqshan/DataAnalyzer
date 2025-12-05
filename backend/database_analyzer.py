@@ -660,3 +660,165 @@ class DatabaseAnalyzer:
                 "success": False,
                 "message": f"删除表失败: {str(e)}"
             }
+    
+    def run_analysis_loop(self, messages: List[Dict[str, Any]], system_prompt: str, history_manager: Any, current_conversation: Dict[str, Any], max_iterations: int = 5):
+        """
+        执行分析循环：调用LLM -> 执行工具 -> 更新历史
+        这是一个生成器，会产生流式事件
+        """
+        iteration = 0
+        while iteration < max_iterations:
+            iteration += 1
+            has_tool_calls = False
+            
+            status_msg = f'🔄 第{iteration}轮分析...'
+            yield {"type": "status", "message": status_msg}
+            
+            try:
+                # 调用 Claude API
+                response = self.client.messages.create(
+                    model=self.model_name,
+                    max_tokens=40000,
+                    messages=messages,
+                    system=system_prompt,
+                    tools=self.tools,
+                    stream=True
+                )
+                
+                assistant_message = {"role": "assistant", "content": []}
+                current_tool_inputs = {}
+                
+                # 处理流式响应
+                for chunk in response:
+                    if chunk.type == "message_start":
+                        continue
+                    elif chunk.type == "content_block_start":
+                        if chunk.content_block.type == "text":
+                            assistant_message["content"].append({"type": "text", "text": ""})
+                        elif chunk.content_block.type == "tool_use":
+                            tool_block = {
+                                "type": "tool_use",
+                                "id": chunk.content_block.id,
+                                "name": chunk.content_block.name,
+                                "input": {}
+                            }
+                            assistant_message["content"].append(tool_block)
+                            current_tool_inputs[chunk.content_block.id] = ""
+                            has_tool_calls = True
+                            
+                            tool_msg = f'🔧 调用工具: {chunk.content_block.name}'
+                            yield {"type": "status", "message": tool_msg}
+                            
+                    elif chunk.type == "content_block_delta":
+                        if chunk.delta.type == "text_delta":
+                            text_content = chunk.delta.text
+                            if assistant_message["content"] and assistant_message["content"][-1].get("type") == "text":
+                                assistant_message["content"][-1]["text"] += text_content
+                            
+                            yield {"type": "ai_response", "content": text_content}
+                            
+                        elif chunk.delta.type == "input_json_delta":
+                            if assistant_message["content"] and assistant_message["content"][-1].get("type") == "tool_use":
+                                tool_id = assistant_message["content"][-1]["id"]
+                                if tool_id in current_tool_inputs:
+                                    current_tool_inputs[tool_id] += chunk.delta.partial_json
+                                    
+                    elif chunk.type == "content_block_stop":
+                        if assistant_message["content"] and assistant_message["content"][-1].get("type") == "tool_use":
+                            tool_id = assistant_message["content"][-1]["id"]
+                            if tool_id in current_tool_inputs:
+                                try:
+                                    complete_input = json.loads(current_tool_inputs[tool_id])
+                                    assistant_message["content"][-1]["input"] = complete_input
+                                except json.JSONDecodeError:
+                                    assistant_message["content"][-1]["input"] = {}
+                                    
+                    elif chunk.type == "message_stop":
+                        break
+                
+                # 保存 AI 消息
+                ai_message_id = history_manager.append_message(
+                    current_conversation['conversation_id'], 
+                    "assistant", 
+                    assistant_message["content"]
+                )
+                
+                if ai_message_id:
+                    yield {"type": "ai_message_id", "message_id": ai_message_id}
+                
+                # 如果有工具调用，执行它们
+                if has_tool_calls:
+                    tool_results = []
+                    tool_calls_record = []
+                    
+                    for content_block in assistant_message["content"]:
+                        if content_block.get("type") == "tool_use":
+                            tool_name = content_block["name"]
+                            tool_input = content_block["input"]
+                            tool_id = content_block["id"]
+                            
+                            try:
+                                result = self.execute_tool(tool_name, tool_input)
+                                
+                                tool_calls_record.append({
+                                    "tool_name": tool_name,
+                                    "tool_input": tool_input,
+                                    "tool_result": result,
+                                    "execution_time": datetime.now().isoformat()
+                                })
+                                
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": json.dumps(result, ensure_ascii=False, indent=2)
+                                })
+                                
+                                complete_msg = f'✅ 工具 {tool_name} 执行完成'
+                                yield {"type": "status", "message": complete_msg}
+                                yield {"type": "tool_result", "tool": tool_name, "result": result}
+                                
+                            except Exception as tool_error:
+                                error_msg = f'工具执行失败: {str(tool_error)}'
+                                yield {"type": "error", "message": error_msg}
+                    
+                    if tool_results:
+                        # 保存工具结果消息
+                        history_manager.append_message(
+                            current_conversation['conversation_id'], 
+                            "user", 
+                            tool_results
+                        )
+                        
+                        # 更新当前对话的消息列表，以便下一轮循环使用
+                        current_conversation = history_manager.get_current_conversation_info()
+                        messages = current_conversation.get('messages', [])
+                    
+                    # 更新工具调用记录
+                    if current_conversation['conversation_id'] and tool_calls_record:
+                        history_manager.update_tool_calls(current_conversation['conversation_id'], tool_calls_record)
+                    
+                    # 继续下一轮循环
+                    continue
+                
+                else:
+                    # 没有工具调用，分析结束
+                    complete_msg = f'✅ 分析完成！ (对话: {current_conversation["conversation_name"]})'
+                    yield {"type": "status", "message": complete_msg}
+                    break
+                    
+            except Exception as api_error:
+                error_msg = f'API调用错误: {str(api_error)}'
+                yield {"type": "error", "message": error_msg}
+                
+                # 记录错误状态
+                if current_conversation['conversation_id']:
+                    history_manager.complete_conversation(current_conversation['conversation_id'], 'error', error_msg, iteration)
+                break
+        
+        if iteration >= max_iterations:
+            error_msg = '达到最大迭代次数限制'
+            yield {"type": "error", "message": error_msg}
+            
+            # 记录中断状态
+            if current_conversation['conversation_id']:
+                history_manager.complete_conversation(current_conversation['conversation_id'], 'interrupted', error_msg, iteration)
