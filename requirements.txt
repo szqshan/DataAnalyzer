@@ -1,0 +1,28 @@
+# 智能数据库分析系统 - Python依赖包
+# 修复版本 - 移除了内置模块 sqlite3
+# Web框架和工具
+flask>=2.3.0
+werkzeug>=2.3.0
+python-multipart>=0.0.6
+# AI 和数据处理核心包
+anthropic>=0.8.0
+pandas>=2.1.0
+numpy>=1.26.0
+# 数据处理和可视化
+matplotlib>=3.8.0
+seaborn>=0.13.0
+# Excel支持
+openpyxl>=3.1.0
+xlrd>=2.0.1
+# 数据处理已简化，移除scikit-learn依赖
+# 配置管理
+python-dotenv>=1.0.0
+# 数据库
+sqlalchemy>=2.0.0
+# JSON处理
+ujson>=5.8.0
+# HTTP客户端
+requests>=2.31.0
+# 工具包
+python-dateutil>=2.8.2
+pytz>=2023.3
