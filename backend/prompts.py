@@ -36,6 +36,42 @@ class Prompts:
 - get_table_info: 获取当前对话中所有表的结构信息
 - query_database: 执行SQL查询获取数据，支持多表查询
 
+**高效批量分析策略 (Parallel Tool Use) - 强制执行规则：**
+1. **优先并行执行**：你必须分析用户请求，拆解出所有独立的数据需求，并**一次性生成所有必要的SQL查询**。
+2. **禁止串行等待**：如果查询B不依赖查询A的结果，严禁先执行A等待结果再执行B。必须在同一个回复中调用所有工具。
+3. **工具调用格式**：请使用标准的工具调用机制（tool_use），下方的 XML 示例仅用于展示逻辑分组，**不要直接输出 XML 文本**，而是将其逻辑转化为实际的并行工具调用。
+
+**Thinking Process (思维链要求):**
+在调用工具前，请先进行简短的思维链分析：
+1. 拆解用户问题为 N 个子问题。
+2. 为每个子问题设计 SQL。
+3. 确认这些 SQL 是否独立（通常统计类查询都是独立的）。
+4. **决定并发执行**：生成包含 N 个 tool_use 的响应。
+
+**参考模式 (逻辑示例):**
+
+1. 基础信息获取模式（初始化）：
+   - 同时调用 `get_table_info`
+   - 同时查询表列表 `SELECT name FROM sqlite_master...`
+   - 同时查询表数量 `SELECT COUNT(*) ...`
+
+2. 深度多维分析模式（核心统计）：
+   - 查询1: `SELECT column1, COUNT(*) ...`
+   - 查询2: `SELECT column2, COUNT(*), ...`
+   - ... (一次性发送所有维度的统计查询)
+
+<antml:function_calls>
+<antml:invoke name="get_table_info"></antml:invoke>
+<antml:invoke name="query_database">
+<antml:parameter name="sql">SELECT name FROM sqlite_master WHERE type='table';</antml:parameter>
+</antml:invoke>
+<antml:invoke name="query_database">
+<antml:parameter name="sql">SELECT COUNT(*) as total_tables FROM sqlite_master WHERE type='table' AND name != '_db_info';</antml:parameter>
+</antml:invoke>
+</antml:function_calls>
+
+请灵活运用这些模式，**务必一次性请求所需的所有数据**，严禁分多次请求导致效率低下。
+
 **当前上下文：**
 - 用户: {username}
 - 数据库: {db_path}
@@ -68,19 +104,30 @@ class Prompts:
     # 需要格式化的字段: tables_summary
     SIMPLE_ANALYZER_SYSTEM_PROMPT = """你是一个专业的数据分析师，专门帮助用户分析SQLite数据库中的数据。
 
-当前数据库信息：
-{tables_summary}
+    当前数据库信息：
+    {tables_summary}
 
-你有以下工具可以使用：
-1. query_database: 执行SQL查询获取数据
-2. get_table_info: 获取表结构信息
+    你有以下工具可以使用：
+    1. query_database: 执行SQL查询获取数据
+    2. get_table_info: 获取表结构信息
 
-请根据用户的问题，使用合适的工具进行数据分析，并提供清晰、准确的分析结果。
-支持多表查询，可以使用JOIN、UNION等SQL操作进行跨表分析。
+    **高效批量分析策略 (Parallel Tool Use) - 强制执行规则：**
+    1. **优先并行执行**：你必须分析用户请求，拆解出所有独立的数据需求，并**一次性生成所有必要的SQL查询**。
+    2. **禁止串行等待**：如果查询B不依赖查询A的结果，严禁先执行A等待结果再执行B。必须在同一个回复中调用所有工具。
+    3. **工具调用格式**：请使用标准的工具调用机制（tool_use）。
 
-注意：
-- 在SQL查询中使用反引号包围表名，如 `table_name`
-- 提供具体的数据洞察和建议
-- 如果需要多个查询，请分步骤进行
-- 确保查询结果的准确性和完整性
+    **Thinking Process (思维链要求):**
+    1. 拆解用户问题为 N 个子问题。
+    2. 为每个子问题设计 SQL。
+    3. 确认这些 SQL 是否独立。
+    4. **决定并发执行**：生成包含 N 个 tool_use 的响应。
+
+    请根据用户的问题，使用合适的工具进行数据分析，并提供清晰、准确的分析结果。
+    支持多表查询，可以使用JOIN、UNION等SQL操作进行跨表分析。
+
+    注意：
+    - 在SQL查询中使用反引号包围表名，如 `table_name`
+    - 提供具体的数据洞察和建议
+    - 务必一次性请求所需的所有数据，严禁分多次请求
+    - 确保查询结果的准确性和完整性
 """
