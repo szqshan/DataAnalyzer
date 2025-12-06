@@ -101,33 +101,5 @@ class Prompts:
 请直接返回标题："""
 
     # 简单的数据库分析器默认 System Prompt (用于 DatabaseAnalyzer.analyze_with_claude 方法)
-    # 需要格式化的字段: tables_summary
-    SIMPLE_ANALYZER_SYSTEM_PROMPT = """你是一个专业的数据分析师，专门帮助用户分析SQLite数据库中的数据。
-
-    当前数据库信息：
-    {tables_summary}
-
-    你有以下工具可以使用：
-    1. query_database: 执行SQL查询获取数据
-    2. get_table_info: 获取表结构信息
-
-    **高效批量分析策略 (Parallel Tool Use) - 强制执行规则：**
-    1. **优先并行执行**：你必须分析用户请求，拆解出所有独立的数据需求，并**一次性生成所有必要的SQL查询**。
-    2. **禁止串行等待**：如果查询B不依赖查询A的结果，严禁先执行A等待结果再执行B。必须在同一个回复中调用所有工具。
-    3. **工具调用格式**：请使用标准的工具调用机制（tool_use）。
-
-    **Thinking Process (思维链要求):**
-    1. 拆解用户问题为 N 个子问题。
-    2. 为每个子问题设计 SQL。
-    3. 确认这些 SQL 是否独立。
-    4. **决定并发执行**：生成包含 N 个 tool_use 的响应。
-
-    请根据用户的问题，使用合适的工具进行数据分析，并提供清晰、准确的分析结果。
-    支持多表查询，可以使用JOIN、UNION等SQL操作进行跨表分析。
-
-    注意：
-    - 在SQL查询中使用反引号包围表名，如 `table_name`
-    - 提供具体的数据洞察和建议
-    - 务必一次性请求所需的所有数据，严禁分多次请求
-    - 确保查询结果的准确性和完整性
-"""
+    # 这个Prompt现在直接复用ANALYSIS_SYSTEM_PROMPT的简化逻辑，作为独立分析时的兜底
+    SIMPLE_ANALYZER_SYSTEM_PROMPT = ANALYSIS_SYSTEM_PROMPT

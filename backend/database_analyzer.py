@@ -535,8 +535,14 @@ class DatabaseAnalyzer:
         """使用Claude进行数据分析"""
         try:
             # 构建系统提示词
-            system_prompt = Prompts.SIMPLE_ANALYZER_SYSTEM_PROMPT.format(
-                tables_summary=self.get_conversation_tables_summary()
+            system_prompt = Prompts.ANALYSIS_SYSTEM_PROMPT.format(
+                tables_summary=self.get_conversation_tables_summary(),
+                username="独立分析用户",
+                db_path=self.current_db_path or "未知",
+                conversation_name="独立分析",
+                conversation_id="temp_analysis",
+                context_info="无历史上下文",
+                query=query
             )
             
             # 构建消息

@@ -434,7 +434,7 @@ def analyze_data_stream(user_data):
                     system_prompt = Prompts.ANALYSIS_SYSTEM_PROMPT.format(**format_args)
                 
                 # 仅首次分析时插入主记录
-                from backend.conversation_history import sqlite3
+                import sqlite3
                 with sqlite3.connect(history_manager.db_path) as conn:
                     cursor = conn.cursor()
                     cursor.execute('SELECT COUNT(*) FROM conversation_history WHERE conversation_id = ?', (current_conversation['conversation_id'],))
@@ -844,7 +844,8 @@ if __name__ == '__main__':
         print("📊 功能: CSV导入 + AI分析 + 历史记录")
         print("🌐 地址: http://localhost:5000")
         
-        app.run(debug=False, host='0.0.0.0', port=5000, use_reloader=False)
+        debug_mode = os.getenv('FLASK_DEBUG', 'false').lower() == 'true'
+        app.run(debug=debug_mode, host='0.0.0.0', port=5000, use_reloader=debug_mode)
         
     except Exception as e:
         print(f"❌ 启动失败: {e}")
