@@ -66,7 +66,8 @@ def check_project_structure():
     required_files = [
         'backend/user_middleware.py',
         'backend/database_analyzer.py',
-        'test_frontend.html'
+        'backend/app.py',
+        'backend/prompts.py'
     ]
     
     missing_files = []
