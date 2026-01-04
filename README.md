@@ -50,6 +50,7 @@
 - 📚 **对话历史管理**：完整的对话历史记录和管理功能
 - 👥 **多用户支持**：支持多用户隔离，每个用户有独立的数据空间
 - 🔄 **流式响应**：支持 AI 响应的流式输出，提升用户体验
+- 📄 **报告模板**：支持将分析结果保存为 Vue+JSON 模板，实现标准化报告复用
 
 ## 📁 项目结构
 
@@ -59,6 +60,7 @@ DataAnalyzer1.2/
 │   ├── app.py                 # API 路由与入口
 │   ├── database_analyzer.py   # 核心分析引擎 (含并行工具逻辑)
 │   ├── conversation_history.py # 对话历史管理
+│   ├── template_manager.py    # 报告模板管理
 │   ├── user_middleware.py     # 用户鉴权中间件
 │   ├── prompts.py             # 提示词管理
 │   └── config.py              # 配置文件
