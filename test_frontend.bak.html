@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能数据库分析系统 - 开发者控制台</title>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked & Highlight -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; }
+        .markdown-content pre { background: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; }
+        .markdown-content code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+        .markdown-content pre code { padding: 0; background: transparent; }
+        .dynamic-template-container { border: 2px dashed #3b82f6; padding: 20px; border-radius: 8px; background: white; margin-top: 20px; }
+        
+        /* 模拟报告卡片样式 */
+        .report-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .kpi { font-size: 24px; font-weight: bold; color: #1f2937; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+        th { background-color: #f9fafb; }
+
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+    <div id="app" class="flex-1 flex flex-col h-full">
+        <!-- 顶部导航 -->
+        <header class="bg-white shadow z-10 p-4 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-4">
+                <h1 class="text-xl font-bold text-gray-800">📊 智能数据库分析系统</h1>
+                <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded">v3.0 Dev Console</span>
+            </div>
+            <div class="flex gap-4 items-center">
+                <!-- 导航Tab -->
+                <nav class="flex bg-gray-100 rounded p-1">
+                    <button v-for="tab in tabs" :key="tab.id" 
+                            @click="currentTab = tab.id"
+                            :class="['px-4 py-1.5 text-sm rounded transition-colors', 
+                                    currentTab === tab.id ? 'bg-white text-blue-600 shadow-sm font-medium' : 'text-gray-600 hover:text-gray-900']">
+                        {{ tab.name }}
+                    </button>
+                </nav>
+
+                <div class="h-6 w-px bg-gray-300 mx-2"></div>
+
+                <div class="text-right">
+                    <div class="text-sm font-semibold">{{ config.username }}</div>
+                    <div class="text-xs text-gray-500 truncate w-24">{{ config.userId }}</div>
+                </div>
+                <button @click="showConfig = true" class="p-2 text-gray-600 hover:text-blue-600 rounded-full hover:bg-gray-100">
+                    ⚙️
+                </button>
+            </div>
+        </header>
+
+        <!-- 主体内容 -->
+        <div class="flex-1 flex overflow-hidden">
+            
+            <!-- 1. 数据管理 -->
+            <div v-if="currentTab === 'data'" class="flex-1 p-8 overflow-y-auto">
+                <div class="max-w-4xl mx-auto">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800">数据上传与管理</h2>
+                    
+                    <!-- 状态卡片 -->
+                    <div class="grid grid-cols-3 gap-4 mb-8">
+                        <div class="bg-white p-4 rounded-lg shadow-sm border">
+                            <div class="text-gray-500 text-sm">API连接状态</div>
+                            <div class="text-lg font-bold flex items-center gap-2" :class="systemStatus?.api_status === 'connected' ? 'text-green-600' : 'text-red-600'">
+                                <span class="w-2 h-2 rounded-full" :class="systemStatus?.api_status === 'connected' ? 'bg-green-600' : 'bg-red-600'"></span>
+                                {{ systemStatus?.api_status === 'connected' ? '正常' : '异常' }}
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border">
+                            <div class="text-gray-500 text-sm">数据库连接</div>
+                            <div class="text-lg font-bold" :class="systemStatus?.database_connected ? 'text-green-600' : 'text-gray-500'">
+                                {{ systemStatus?.database_connected ? '已连接' : '未连接' }}
+                            </div>
+                        </div>
+                        <div class="bg-white p-4 rounded-lg shadow-sm border">
+                            <div class="text-gray-500 text-sm">当前表记录数</div>
+                            <div class="text-lg font-bold text-gray-800">{{ systemStatus?.record_count || 0 }}</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-lg shadow-sm border p-8 mb-8">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center hover:border-blue-500 transition-colors bg-gray-50">
+                            <input type="file" ref="fileInput" accept=".csv" class="hidden" @change="handleFileUpload">
+                            <div class="text-4xl mb-4">📂</div>
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">上传 CSV 数据文件</h3>
+                            <p class="text-gray-500 text-sm mb-6">支持 .csv 格式，最大 100MB</p>
+                            <button @click="$refs.fileInput.click()" class="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 shadow-sm transition-all">
+                                选择文件
+                            </button>
+                        </div>
+                    </div>
+
+                    <div v-if="tables.length > 0">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="font-bold text-lg text-gray-800">当前会话数据表</h3>
+                            <button @click="fetchTables" class="text-sm text-blue-600 hover:underline">刷新列表</button>
+                        </div>
+                        <div class="bg-white rounded-lg shadow-sm border overflow-hidden">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">表名</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">来源文件</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">行数</th>
+                                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr v-for="table in tables" :key="table.table_name" class="hover:bg-gray-50">
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{{ table.table_name }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ table.original_filename }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ table.row_count }}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <button @click="deleteTable(table.table_name)" class="text-red-600 hover:text-red-900">删除</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 智能分析 (包含侧边栏) -->
+            <div v-if="currentTab === 'analysis'" class="flex-1 flex h-full overflow-hidden">
+                <!-- 左侧：对话列表 -->
+                <aside class="w-72 bg-gray-50 border-r flex flex-col shrink-0">
+                    <div class="p-4 border-b">
+                        <button @click="createNewConversation" class="w-full bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2 shadow-sm transition-all">
+                            <span>+</span> 新建对话
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-3 space-y-2">
+                        <div v-if="conversations.length === 0" class="text-center text-gray-400 text-sm py-8">
+                            暂无历史对话
+                        </div>
+                        <div v-for="conv in conversations" :key="conv.conversation_id" 
+                             @click="switchConversation(conv.conversation_id)"
+                             class="group p-3 rounded-lg cursor-pointer transition-all border relative"
+                             :class="currentConversationId === conv.conversation_id ? 'bg-white border-blue-200 shadow-sm ring-1 ring-blue-200' : 'bg-transparent border-transparent hover:bg-gray-200/50'">
+                            
+                            <div class="font-medium text-sm text-gray-800 mb-1 truncate pr-6">{{ conv.conversation_name || '新对话' }}</div>
+                            <div class="text-xs text-gray-500 truncate">{{ conv.last_message || conv.user_query || '无内容' }}</div>
+                            <div class="text-xs text-gray-400 mt-1.5 flex justify-between">
+                                <span>{{ formatTime(conv.last_activity || conv.start_time) }}</span>
+                            </div>
+                            
+                            <!-- 删除按钮 -->
+                            <button @click.stop="deleteConversation(conv.conversation_id)" 
+                                    class="absolute top-2 right-2 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                ×
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- 中间：聊天区域 -->
+                <main class="flex-1 flex flex-col bg-white min-w-0">
+                    <!-- 对话标题栏 -->
+                    <div class="h-14 border-b flex items-center px-6 justify-between bg-white shrink-0">
+                        <h3 class="font-bold text-gray-800 truncate">
+                            {{ currentConversation?.conversation_name || '未选择对话' }}
+                        </h3>
+                        <div class="text-sm text-gray-500">
+                            {{ currentConversationId ? (isAnalyzing ? '正在分析...' : '就绪') : '请新建或选择对话' }}
+                        </div>
+                    </div>
+
+                    <!-- 消息列表 -->
+                    <div class="flex-1 overflow-y-auto p-6 space-y-6" ref="chatBox">
+                        <div v-if="chatMessages.length === 0" class="flex h-full items-center justify-center text-gray-400 flex-col gap-4">
+                            <div class="text-6xl">🤖</div>
+                            <p>开始一个新的数据分析对话</p>
+                            <div class="flex gap-2 text-sm">
+                                <button @click="quickStart('分析当前数据的基本情况')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full border">分析基本情况</button>
+                                <button @click="quickStart('统计各列的缺失值')" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full border">检查缺失值</button>
+                            </div>
+                        </div>
+
+                        <div v-for="(msg, index) in chatMessages" :key="index" :class="['flex w-full', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+                            <div :class="['max-w-[85%] rounded-2xl p-4 shadow-sm', 
+                                        msg.role === 'user' ? 'bg-blue-600 text-white rounded-br-none' : 'bg-gray-100 text-gray-800 rounded-bl-none']">
+                                
+                                <div v-if="msg.type === 'text'" class="markdown-content text-sm leading-relaxed" v-html="renderMarkdown(msg.content)"></div>
+                                
+                                <!-- 动态模板渲染区域 -->
+                                <div v-if="msg.type === 'template_render'" class="mt-2 bg-white rounded-lg p-3 border shadow-sm">
+                                    <div class="flex justify-between items-center mb-2 border-b pb-2">
+                                        <div class="text-xs text-gray-500 font-bold">📊 {{ msg.templateName }}</div>
+                                    </div>
+                                    <!-- 动态组件挂载点 -->
+                                    <component :is="msg.component" :report_data="msg.data"></component>
+                                </div>
+
+                                <!-- 生成模板按钮 (仅针对 AI 回复) -->
+                                <div v-if="msg.role === 'assistant' && msg.type === 'text'" class="mt-3 pt-2 border-t border-gray-200/20 flex justify-end">
+                                    <button @click="openTemplateGenerator(msg.content)" class="text-xs flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity bg-white/20 px-2 py-1 rounded">
+                                        <span>📐</span> 保存为模板
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 加载动画 -->
+                        <div v-if="isAnalyzing" class="flex justify-start">
+                            <div class="bg-gray-100 rounded-2xl rounded-bl-none p-4 text-gray-500 text-sm flex items-center gap-2">
+                                <div class="flex space-x-1">
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                                </div>
+                                <span>{{ currentStatus }}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 输入区域 -->
+                    <div class="p-4 border-t bg-white shrink-0">
+                        <div v-if="activeTemplate" class="mb-2 bg-blue-50 p-2 rounded flex justify-between items-center text-sm text-blue-700 border border-blue-100">
+                            <div class="flex items-center gap-2">
+                                <span class="bg-blue-200 text-blue-800 text-xs px-2 py-0.5 rounded">模板模式</span>
+                                <strong>{{ activeTemplate.name }}</strong>
+                            </div>
+                            <button @click="clearActiveTemplate" class="text-blue-500 hover:text-blue-700 hover:bg-blue-100 rounded px-2">✕ 取消</button>
+                        </div>
+
+                        <!-- System Prompt 配置 -->
+                        <div class="mb-2">
+                            <button @click="useCustomSystemPrompt = !useCustomSystemPrompt" 
+                                    class="text-xs text-gray-500 hover:text-blue-600 flex items-center gap-1">
+                                <span>⚙️</span> {{ useCustomSystemPrompt ? '收起系统提示词设置' : '设置系统提示词' }}
+                            </button>
+                            <div v-if="useCustomSystemPrompt" class="mt-2 p-2 bg-gray-50 rounded border animate-fade-in">
+                                <textarea v-model="customSystemPrompt" 
+                                          class="w-full text-xs bg-white border rounded p-2 outline-none focus:border-blue-500" 
+                                          rows="3" 
+                                          placeholder="输入自定义 System Prompt... (可选)"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="relative">
+                            <textarea v-model="userQuery" @keydown.enter.ctrl="startAnalysis" @keydown.enter.exact.prevent="startAnalysis"
+                                      class="w-full border rounded-xl p-3 pr-24 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none bg-gray-50 focus:bg-white transition-colors" 
+                                      rows="3" 
+                                      :placeholder="activeTemplate ? '输入数据范围（如：2023年第一季度）...' : '输入分析需求，按 Enter 发送...'"
+                                      :disabled="isAnalyzing"></textarea>
+                            
+                            <button @click="startAnalysis" :disabled="isAnalyzing || !userQuery.trim()"
+                                    class="absolute bottom-3 right-3 bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors text-sm font-medium">
+                                发送
+                            </button>
+                        </div>
+                        <div class="text-xs text-gray-400 mt-2 text-center">按 Enter 发送，Ctrl + Enter 换行</div>
+                    </div>
+                </main>
+            </div>
+
+            <!-- 3. 模板管理 -->
+            <div v-if="currentTab === 'templates'" class="flex-1 p-8 overflow-y-auto">
+                <div class="max-w-6xl mx-auto">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">报告模板库</h2>
+                        <button @click="fetchTemplates" class="text-blue-600 hover:bg-blue-50 px-3 py-1.5 rounded transition-colors">刷新列表</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div v-for="tpl in templates" :key="tpl.id" class="bg-white border rounded-xl p-5 hover:shadow-lg transition-all group relative flex flex-col h-64">
+                            <div class="flex-1">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h3 class="font-bold text-lg text-gray-800 line-clamp-1" :title="tpl.name">{{ tpl.name }}</h3>
+                                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button @click="viewTemplateDetail(tpl.id)" class="p-1.5 text-gray-400 hover:text-blue-600 rounded hover:bg-blue-50" title="查看代码">📝</button>
+                                        <button @click="deleteTemplate(tpl.id)" class="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-red-50" title="删除">🗑️</button>
+                                    </div>
+                                </div>
+                                <p class="text-sm text-gray-500 line-clamp-3 mb-4">{{ tpl.description || '无描述' }}</p>
+                            </div>
+                            
+                            <div class="mt-auto pt-4 border-t flex justify-between items-center">
+                                <span class="text-xs text-gray-400">{{ formatDate(tpl.created_at) }}</span>
+                                <button @click="useTemplate(tpl)" 
+                                        class="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-sm hover:bg-blue-600 hover:text-white font-medium transition-colors">
+                                    使用此模板
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 空状态 -->
+                        <div v-if="templates.length === 0" class="col-span-full py-20 text-center border-2 border-dashed rounded-xl bg-gray-50">
+                            <div class="text-4xl mb-4">📐</div>
+                            <p class="text-gray-500 font-medium">暂无模板</p>
+                            <p class="text-sm text-gray-400 mt-2">在智能分析的对话中点击“保存为模板”即可创建</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 弹窗：配置 -->
+        <div v-if="showConfig" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 w-96 shadow-2xl transform transition-all scale-100">
+                <h3 class="text-lg font-bold mb-4">系统配置</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                        <input v-model="config.apiKey" type="password" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+                        <input v-model="config.userId" type="text" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                        <input v-model="config.username" type="text" class="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button @click="showConfig = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+                    <button @click="saveConfig" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 弹窗：生成模板确认 -->
+        <div v-if="showTemplateGenerator" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 w-[600px] shadow-2xl max-h-[80vh] flex flex-col">
+                <h3 class="text-lg font-bold mb-4">生成新模板</h3>
+                <div class="bg-gray-50 p-4 rounded-lg mb-4 text-sm flex-1 overflow-y-auto border font-mono">
+                    <div class="font-bold mb-2 text-gray-500 sticky top-0 bg-gray-50 pb-2 border-b">源 HTML 内容 preview:</div>
+                    <div class="whitespace-pre-wrap break-all text-xs">{{ templateSourceHtml.substring(0, 500) }}...</div>
+                </div>
+                <div class="mb-6 shrink-0">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">补充说明 (可选)</label>
+                    <textarea v-model="templateContext" placeholder="例如：这是一份包含季度收入和利润的报表..." 
+                              class="w-full border rounded-lg p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" rows="3"></textarea>
+                </div>
+                <div class="flex justify-end gap-3 shrink-0">
+                    <button @click="showTemplateGenerator = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+                    <button @click="confirmGenerateTemplate" 
+                            :disabled="isGeneratingTemplate"
+                            class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 disabled:opacity-50">
+                        <span v-if="isGeneratingTemplate" class="animate-spin">⌛</span>
+                        {{ isGeneratingTemplate ? 'AI生成中...' : '开始生成' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 弹窗：模板代码预览 -->
+        <div v-if="viewingTemplate" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <div class="bg-white rounded-xl p-6 w-[900px] max-h-[90vh] overflow-y-auto shadow-2xl flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b pb-4">
+                    <h3 class="text-lg font-bold">{{ viewingTemplate.name }}</h3>
+                    <button @click="viewingTemplate = null" class="text-gray-500 hover:text-gray-700 w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100">✕</button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto space-y-6">
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-sm font-bold text-gray-700">Vue Template</h4>
+                            <button class="text-xs text-blue-600 hover:underline">复制</button>
+                        </div>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto font-mono"><code>{{ viewingTemplate.vue_template }}</code></pre>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <h4 class="text-sm font-bold text-gray-700">Data Schema (JSON)</h4>
+                        </div>
+                        <pre class="bg-gray-900 text-gray-100 p-4 rounded-lg text-sm overflow-x-auto font-mono"><code>{{ JSON.stringify(viewingTemplate.data_schema, null, 2) }}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed, nextTick, watch } = Vue;
+
+        createApp({
+            setup() {
+                // 配置
+                const config = reactive({
+                    apiKey: localStorage.getItem('apiKey') || '',
+                    userId: localStorage.getItem('userId') || 'dev_user',
+                    username: localStorage.getItem('username') || 'Developer'
+                });
+                const showConfig = ref(false);
+
+                // 状态
+                const currentTab = ref('analysis');
+                const systemStatus = ref(null);
+                const tables = ref([]);
+                const templates = ref([]);
+                
+                // 聊天相关
+                const conversations = ref([]);
+                const currentConversationId = ref(null);
+                const currentConversation = computed(() => 
+                    conversations.value.find(c => c.conversation_id === currentConversationId.value)
+                );
+                const chatMessages = ref([]);
+                const userQuery = ref('');
+                const isAnalyzing = ref(false);
+                const currentStatus = ref('');
+                const chatBox = ref(null);
+
+                // 模板相关
+                const showTemplateGenerator = ref(false);
+                const templateSourceHtml = ref('');
+                const templateContext = ref('');
+                const isGeneratingTemplate = ref(false);
+                const viewingTemplate = ref(null);
+                const activeTemplate = ref(null); // 当前选中的待使用模板
+
+                const useCustomSystemPrompt = ref(false);
+                const customSystemPrompt = ref('');
+
+                const API_BASE = 'http://localhost:5000'; // 后端地址
+
+                const tabs = [
+                    { id: 'data', name: '📂 数据管理' },
+                    { id: 'analysis', name: '🤖 智能分析' },
+                    { id: 'templates', name: '📐 模板库' },
+                ];
+
+                // -----------------------------------------------------------
+                // 基础功能
+                // -----------------------------------------------------------
+                const saveConfig = () => {
+                    localStorage.setItem('apiKey', config.apiKey);
+                    localStorage.setItem('userId', config.userId);
+                    localStorage.setItem('username', config.username);
+                    showConfig.value = false;
+                    checkStatus();
+                    fetchConversations();
+                };
+
+                const getHeaders = () => ({
+                    'Content-Type': 'application/json',
+                    'X-User-ID': config.userId,
+                    'X-Username': encodeURIComponent(config.username),
+                    'X-API-Key': config.apiKey
+                });
+
+                const checkStatus = async () => {
+                    if (!config.apiKey) return;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/status`, { headers: getHeaders() });
+                        const data = await res.json();
+                        systemStatus.value = data;
+                        if (data.database_connected) fetchTables();
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const fetchTables = async () => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/tables-info`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            tables.value = data.data.tables;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const handleFileUpload = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    const headers = getHeaders();
+                    delete headers['Content-Type'];
+
+                    try {
+                        const res = await fetch(`${API_BASE}/api/upload`, {
+                            method: 'POST',
+                            headers: headers,
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('✅ 上传成功');
+                            fetchTables();
+                        } else {
+                            alert('❌ 上传失败: ' + data.message);
+                        }
+                    } catch (e) {
+                        alert('❌ 上传异常: ' + e.message);
+                    }
+                };
+
+                const deleteTable = async (tableName) => {
+                    if (!confirm(`确定要删除表 ${tableName} 吗？`)) return;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/tables/delete`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ table_name: tableName })
+                        });
+                        const data = await res.json();
+                        if (data.success) fetchTables();
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                };
+
+                // -----------------------------------------------------------
+                // 对话管理
+                // -----------------------------------------------------------
+                const fetchConversations = async () => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/conversations?limit=20`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            conversations.value = data.conversations;
+                        }
+                    } catch (e) {
+                        console.error("获取对话列表失败", e);
+                    }
+                };
+
+                const createNewConversation = async () => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/conversations/create`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ description: 'New Analysis Session' })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            await fetchConversations();
+                            switchConversation(data.conversation.conversation_id);
+                        }
+                    } catch (e) {
+                        alert('创建对话失败: ' + e.message);
+                    }
+                };
+
+                const switchConversation = async (id) => {
+                    if (currentConversationId.value === id) return;
+                    
+                    try {
+                        // 1. 切换后端状态
+                        const res = await fetch(`${API_BASE}/api/conversations/switch`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ conversation_id: id })
+                        });
+                        
+                        if (res.ok) {
+                            currentConversationId.value = id;
+                            loadConversationHistory(id);
+                        }
+                    } catch (e) {
+                        console.error("切换对话失败", e);
+                    }
+                };
+
+                const loadConversationHistory = async (id) => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/conversations/${id}`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            // 解析消息历史
+                            let messages = [];
+                            try {
+                                if (data.conversation.messages) {
+                                    // 兼容不同的存储格式
+                                    messages = typeof data.conversation.messages === 'string' 
+                                        ? JSON.parse(data.conversation.messages) 
+                                        : data.conversation.messages;
+                                }
+                            } catch (e) {
+                                console.error("解析消息历史失败", e);
+                            }
+                            
+                            // 转换消息格式适配 UI
+                            chatMessages.value = messages.map(msg => {
+                                // 简化处理，取第一个 text 内容
+                                let content = "";
+                                if (Array.isArray(msg.content)) {
+                                    content = msg.content.find(c => c.type === 'text')?.text || "";
+                                } else {
+                                    content = msg.content;
+                                }
+                                
+                                return {
+                                    role: msg.role,
+                                    type: 'text', // 默认 text，后续可以增强支持 tool_use
+                                    content: content
+                                };
+                            });
+                            
+                            await nextTick();
+                            scrollToBottom();
+                        }
+                    } catch (e) {
+                        console.error("加载历史详情失败", e);
+                    }
+                };
+
+                const deleteConversation = async (id) => {
+                    if (!confirm('确定删除此对话记录吗？')) return;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/conversations/${id}`, {
+                            method: 'DELETE',
+                            headers: getHeaders()
+                        });
+                        if (res.ok) {
+                            if (currentConversationId.value === id) {
+                                currentConversationId.value = null;
+                                chatMessages.value = [];
+                            }
+                            fetchConversations();
+                        }
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                };
+
+                // -----------------------------------------------------------
+                // 分析功能 (核心)
+                // -----------------------------------------------------------
+                const quickStart = (text) => {
+                    userQuery.value = text;
+                    startAnalysis();
+                };
+
+                const startAnalysis = async () => {
+                    if (!userQuery.value.trim()) return;
+                    
+                    // 1. 如果没有当前对话，先创建
+                    if (!currentConversationId.value) {
+                        try {
+                            const res = await fetch(`${API_BASE}/api/conversations/create`, {
+                                method: 'POST',
+                                headers: getHeaders(),
+                                body: JSON.stringify({ description: 'New Chat' })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                await fetchConversations();
+                                currentConversationId.value = data.conversation.conversation_id;
+                                // 等待一点时间确保状态同步
+                                await new Promise(r => setTimeout(r, 100));
+                            } else {
+                                throw new Error("无法自动创建对话");
+                            }
+                        } catch (e) {
+                            alert("创建新对话失败: " + e.message);
+                            return;
+                        }
+                    }
+
+                    const query = userQuery.value;
+                    // 乐观更新 UI
+                    chatMessages.value.push({ role: 'user', type: 'text', content: query });
+                    userQuery.value = '';
+                    isAnalyzing.value = true;
+                    currentStatus.value = 'AI 思考中...';
+
+                    await nextTick();
+                    scrollToBottom();
+
+                    try {
+                        let payload = {
+                            query: query,
+                            conversation_id: currentConversationId.value
+                        };
+
+                        // 如果激活了模板，注入 System Prompt
+                        if (activeTemplate.value) {
+                            payload.system_prompt = `
+你是一个专业的数据计算引擎。请根据以下 Data Schema 定义，计算并返回严格的 JSON 数据。
+
+Data Schema:
+${JSON.stringify(activeTemplate.value.data_schema, null, 2)}
+
+要求：
+1. 仅返回合法的 JSON 字符串，不要包含 Markdown 标记。
+2. JSON 结构必须与 Schema 完全一致。
+3. 针对用户当前的具体查询范围：${query}
+`;
+                        } else if (useCustomSystemPrompt.value && customSystemPrompt.value.trim()) {
+                            // 自定义 System Prompt
+                            payload.system_prompt = customSystemPrompt.value.trim();
+                        }
+
+                        const response = await fetch(`${API_BASE}/api/analyze-stream`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify(payload)
+                        });
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let aiResponseContent = '';
+                        let isTemplateMode = !!activeTemplate.value;
+                        
+                        // 初始化 AI 回复消息
+                        if (!isTemplateMode) {
+                            chatMessages.value.push({ role: 'assistant', type: 'text', content: '' });
+                        }
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+                            
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
+                            
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    try {
+                                        const data = JSON.parse(line.slice(6));
+                                        
+                                        if (data.type === 'status') {
+                                            currentStatus.value = data.message;
+                                            // 自动滚动到底部
+                                            await nextTick();
+                                            scrollToBottom();
+                                        } else if (data.type === 'ai_response') {
+                                            aiResponseContent += data.content;
+                                            
+                                            // 实时打字机效果 (非模板模式)
+                                            if (!isTemplateMode) {
+                                                const lastMsg = chatMessages.value[chatMessages.value.length - 1];
+                                                if (lastMsg.role === 'assistant' && lastMsg.type === 'text') {
+                                                    lastMsg.content = aiResponseContent;
+                                                }
+                                                await nextTick();
+                                                scrollToBottom();
+                                            }
+                                        } else if (data.type === 'tool_result') {
+                                            // 显示工具调用结果
+                                            chatMessages.value.push({ 
+                                                role: 'system', 
+                                                type: 'tool_result', 
+                                                content: `🛠️ 工具调用结果 [${data.tool}]:\n` + '```json\n' + JSON.stringify(data.result, null, 2) + '\n```'
+                                            });
+                                            // 如果是非模板模式，需要重新追加一个空的 assistant 消息用于后续文本
+                                            if (!isTemplateMode) {
+                                                chatMessages.value.push({ role: 'assistant', type: 'text', content: '' });
+                                                // 重置累积内容，因为新的文本是新的段落
+                                                // 注意：这里取决于后端是追加还是全新的 content。后端逻辑是追加。
+                                                // 简单处理：不重置 aiResponseContent，但 UI 上可能会有断层。
+                                                // 更好的做法：工具结果只作为插入消息，不影响 aiResponseContent 的累积。
+                                                // 但因为我们已经 push 了新消息，之前的 assistant 消息就定格了。
+                                                // 修正策略：保持 aiResponseContent 累积，并在新的 assistant 消息中只显示新增部分？
+                                                // 或者，简单点，工具结果不打断 assistant 消息流，而是作为独立消息插入？
+                                                // 但 UI 列表是线性的。
+                                                // 暂时策略：工具结果作为 system 消息插入，后续 AI 文本继续追加到最新的 assistant 消息中。
+                                                // 如果上一条是 system，则新建 assistant。
+                                                
+                                                // 重新定位到最新的 assistant 消息
+                                                // aiResponseContent 包含了全部历史？不，是增量。
+                                                // 实际上后端返回的是增量 content。
+                                                // aiResponseContent 是我们在前端累积的。
+                                                
+                                                // 如果插入了 tool_result，我们需要一个新的容器来承载后续的 AI 文本
+                                                // 但 aiResponseContent 已经包含了之前的文本。
+                                                // 这是一个复杂点。
+                                                // 简化方案：工具结果只在控制台或状态栏显示，或者以特殊 UI 嵌入。
+                                                // 这里为了满足用户需求，我们作为 system 消息插入。
+                                                // 并且清空 aiResponseContent，假设工具调用后的文本是新的响应阶段。
+                                                aiResponseContent = ''; 
+                                            }
+                                        } else if (data.type === 'error') {
+                                            chatMessages.value.push({ role: 'assistant', type: 'text', content: `❌ 错误: ${data.message}` });
+                                        }
+                                    } catch (e) {}
+                                }
+                            }
+                        }
+
+                        // 分析完成
+                        if (isTemplateMode) {
+                            try {
+                                let jsonStr = aiResponseContent.trim();
+                                if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
+                                if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
+                                if (jsonStr.endsWith('```')) jsonStr = jsonStr.substring(0, jsonStr.length - 3);
+                                
+                                const jsonData = JSON.parse(jsonStr);
+                                const DynamicReport = {
+                                    template: activeTemplate.value.vue_template,
+                                    props: ['report_data']
+                                };
+
+                                chatMessages.value.push({
+                                    role: 'assistant',
+                                    type: 'template_render',
+                                    templateName: activeTemplate.value.name,
+                                    component: DynamicReport,
+                                    data: jsonData
+                                });
+                                activeTemplate.value = null;
+
+                            } catch (e) {
+                                console.error('JSON解析失败', e);
+                                chatMessages.value.push({ role: 'assistant', type: 'text', content: '❌ 模板渲染失败，原始数据:\n' + aiResponseContent });
+                            }
+                        } else {
+                            // 普通模式下，最后可能需要处理一些收尾工作，但内容已经流式输出了
+                            // 如果 aiResponseContent 为空（可能是纯工具调用），可以不做处理
+                        }
+                        
+                        // 刷新对话列表以更新摘要
+                        fetchConversations();
+
+                    } catch (e) {
+                        chatMessages.value.push({ role: 'assistant', type: 'text', content: `❌ 请求异常: ${e.message}` });
+                    } finally {
+                        isAnalyzing.value = false;
+                        currentStatus.value = '';
+                        await nextTick();
+                        scrollToBottom();
+                    }
+                };
+
+                // -----------------------------------------------------------
+                // 模板管理功能
+                // -----------------------------------------------------------
+                const openTemplateGenerator = (htmlContent) => {
+                    templateSourceHtml.value = htmlContent;
+                    showTemplateGenerator.value = true;
+                };
+
+                const confirmGenerateTemplate = async () => {
+                    isGeneratingTemplate.value = true;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/templates/generate`, {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({
+                                html_content: templateSourceHtml.value,
+                                conversation_context: templateContext.value,
+                                conversation_id: currentConversationId.value
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('✅ 模板生成成功！');
+                            showTemplateGenerator.value = false;
+                            fetchTemplates();
+                        } else {
+                            alert('❌ 生成失败: ' + data.message);
+                        }
+                    } catch (e) {
+                        alert('❌ 异常: ' + e.message);
+                    } finally {
+                        isGeneratingTemplate.value = false;
+                    }
+                };
+
+                const fetchTemplates = async () => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/templates`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            templates.value = data.data;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const viewTemplateDetail = async (id) => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/templates/${id}`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            viewingTemplate.value = data.data;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const deleteTemplate = async (id) => {
+                    if (!confirm('确定删除此模板吗？')) return;
+                    try {
+                        const res = await fetch(`${API_BASE}/api/templates/${id}`, { 
+                            method: 'DELETE',
+                            headers: getHeaders() 
+                        });
+                        const data = await res.json();
+                        if (data.success) fetchTemplates();
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                };
+
+                const useTemplate = async (tpl) => {
+                    try {
+                        const res = await fetch(`${API_BASE}/api/templates/${tpl.id}`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            activeTemplate.value = data.data;
+                            currentTab.value = 'analysis';
+                            
+                            // 如果没有对话，创建新对话
+                            if (!currentConversationId.value) {
+                                createNewConversation();
+                            }
+                        }
+                    } catch (e) {
+                        alert('无法加载模板详情');
+                    }
+                };
+
+                const clearActiveTemplate = () => {
+                    activeTemplate.value = null;
+                };
+
+                // 工具函数
+                const formatDate = (str) => {
+                    if (!str) return '';
+                    return new Date(str).toLocaleString();
+                };
+                
+                const formatTime = (str) => {
+                    if (!str) return '';
+                    const date = new Date(str);
+                    const now = new Date();
+                    if (date.toDateString() === now.toDateString()) {
+                        return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    }
+                    return date.toLocaleDateString([], {month: 'numeric', day: 'numeric'});
+                };
+
+                const renderMarkdown = (text) => {
+                    if (!text) return '';
+                    return marked.parse(text);
+                };
+                
+                const scrollToBottom = () => {
+                    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+                };
+
+                // 初始化
+                onMounted(() => {
+                    // 如果有保存的 Key，自动初始化
+                    if (config.apiKey) {
+                        checkStatus();
+                        fetchConversations();
+                        fetchTemplates();
+                    } else {
+                        showConfig.value = true;
+                    }
+                });
+
+                return {
+                    config, showConfig, saveConfig,
+                    currentTab, tabs, systemStatus, checkStatus,
+                    tables, handleFileUpload, deleteTable, fetchTables,
+                    // 聊天
+                    conversations, currentConversationId, currentConversation, createNewConversation, switchConversation, deleteConversation,
+                    chatMessages, userQuery, startAnalysis, isAnalyzing, currentStatus, chatBox, quickStart,
+                    useCustomSystemPrompt, customSystemPrompt,
+                    renderMarkdown, formatTime, formatDate,
+                    // 模板
+                    templates, fetchTemplates, deleteTemplate,
+                    showTemplateGenerator, templateSourceHtml, templateContext, isGeneratingTemplate, openTemplateGenerator, confirmGenerateTemplate,
+                    viewingTemplate, viewTemplateDetail,
+                    useTemplate, activeTemplate, clearActiveTemplate
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
