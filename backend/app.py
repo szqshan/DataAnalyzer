@@ -20,6 +20,9 @@ from database_analyzer import DatabaseAnalyzer
 # 导入对话历史记录管理器
 from conversation_history import ConversationHistoryManager
 
+# 导入模板管理器
+from template_manager import TemplateManager
+
 # 导入配置和Prompt
 from config import Config
 from prompts import Prompts
@@ -40,6 +43,7 @@ app.config['MAX_CONTENT_LENGTH'] = Config.MAX_CONTENT_LENGTH  # 100MB最大文�
 # 用户分析器和历史记录管理器实例缓存
 user_analyzers = {}
 user_history_managers = {}
+user_template_managers = {}
 
 def extract_query_from_data(data):
     """安全地从请求数据中提取查询字符串"""
@@ -129,6 +133,30 @@ def get_user_history_manager(user_data):
         user_history_managers[user_id] = history_manager
         
     return user_history_managers[user_id]
+
+def get_user_template_manager(user_data, api_key):
+    """获取或创建用户专属的模板管理器实例"""
+    user_id = user_data['user_id']
+    
+    # 模板管理器也需要分析器来执行AI任务，所以需要API Key
+    # 使用与分析器相同的Key生成逻辑
+    manager_key = f"{user_id}_{hash(api_key) % 10000}" if api_key else user_id
+    
+    if manager_key not in user_template_managers:
+        user_paths = user_manager.get_user_paths(user_id)
+        
+        # 尝试获取分析器实例（如果提供了API Key）
+        analyzer = None
+        if api_key:
+            try:
+                analyzer = get_user_analyzer(user_data, api_key)
+            except:
+                pass
+        
+        manager = TemplateManager(user_paths, user_id, analyzer)
+        user_template_managers[manager_key] = manager
+        
+    return user_template_managers[manager_key]
 
 @app.route('/api/status', methods=['GET'])
 @allow_default_user
@@ -832,6 +860,121 @@ def delete_message(user_data, conversation_id, message_id):
             return jsonify({'success': False, 'message': '消息删除失败'}), 500
     except Exception as e:
         return jsonify({'success': False, 'message': f'消息删除异常: {str(e)}'}), 500
+
+# 模板管理相关API
+@app.route('/api/templates/generate', methods=['POST'])
+@allow_default_user
+def generate_template(user_data):
+    """从现有的 HTML 报告生成 Vue 模板"""
+    try:
+        api_key = user_data.get('api_key')
+        if not api_key:
+            return jsonify({"success": False, "message": "未提供API密钥"}), 400
+            
+        data = request.get_json() or {}
+        html_content = data.get('html_content')
+        conversation_context = data.get('conversation_context', '')
+        source_conversation_id = data.get('conversation_id')
+        
+        if not html_content:
+            return jsonify({"success": False, "message": "缺少HTML内容"}), 400
+            
+        # 获取模板管理器
+        template_manager = get_user_template_manager(user_data, api_key)
+        
+        # 生成模板
+        template_data = template_manager.generate_template_from_report(html_content, conversation_context)
+        
+        # 保存模板
+        template_id = template_manager.save_template(template_data, source_conversation_id)
+        
+        return jsonify({
+            "success": True,
+            "message": "模板生成成功",
+            "data": {
+                "template_id": template_id,
+                "template_data": template_data
+            }
+        })
+        
+    except Exception as e:
+        print(f"❌ 生成模板失败: {str(e)}")
+        return jsonify({
+            "success": False,
+            "message": f"生成模板失败: {str(e)}"
+        }), 500
+
+@app.route('/api/templates', methods=['GET'])
+@allow_default_user
+def list_templates(user_data):
+    """获取用户的所有模板"""
+    try:
+        api_key = user_data.get('api_key') # 虽然不需要调用AI，但为了保持一致性
+        template_manager = get_user_template_manager(user_data, api_key)
+        
+        templates = template_manager.list_templates()
+        
+        return jsonify({
+            "success": True,
+            "data": templates
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"获取模板列表失败: {str(e)}"
+        }), 500
+
+@app.route('/api/templates/<template_id>', methods=['GET'])
+@allow_default_user
+def get_template(user_data, template_id):
+    """获取指定模板详情"""
+    try:
+        api_key = user_data.get('api_key')
+        template_manager = get_user_template_manager(user_data, api_key)
+        
+        template = template_manager.get_template(template_id)
+        
+        if template:
+            return jsonify({
+                "success": True,
+                "data": template
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "模板不存在"
+            }), 404
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"获取模板详情失败: {str(e)}"
+        }), 500
+
+@app.route('/api/templates/<template_id>', methods=['DELETE'])
+@allow_default_user
+def delete_template(user_data, template_id):
+    """删除模板"""
+    try:
+        api_key = user_data.get('api_key')
+        template_manager = get_user_template_manager(user_data, api_key)
+        
+        success = template_manager.delete_template(template_id)
+        
+        if success:
+            return jsonify({
+                "success": True,
+                "message": "模板删除成功"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "message": "模板删除失败"
+            }), 500
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": f"删除模板失败: {str(e)}"
+        }), 500
 
 if __name__ == '__main__':
     try:

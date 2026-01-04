@@ -3,1782 +3,673 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>数据库分析系统测试页面</title>
-</head>
-<body>
-    <h1>数据库分析系统 - 接口测试页面</h1>
-    
-    <!-- 用户信息设置 -->
-    <div>
-        <h2>1. 用户信息设置</h2>
-        <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 12px; margin-bottom: 15px; border-radius: 4px;">
-            <strong>⚠️ 重要提醒：</strong> 系统现在仅支持付费用户访问，所有三个字段（用户ID、用户名、API密钥）都是<strong>必需的</strong>。
-            <br>请确保提供有效的 Anthropic API Key 以正常使用系统功能。
-        </div>
-        <label>用户ID: <input type="text" id="userId" value="test_user_001" placeholder="用户ID（必需）"></label><br><br>
-        <label>用户名: <input type="text" id="username" value="TestUser" placeholder="用户名（必需）"></label><br><br>
-        <label>API密钥: <input type="password" id="apiKey" value="" placeholder="输入您的API密钥（必需）如: sk-ant-api..." style="width: 400px;"></label><br>
-        <small style="color: #666; margin-left: 80px;">🔑 API密钥必须有效，用于访问Anthropic Claude服务</small><br><br>
-        <button onclick="setUserInfo()">设置用户信息</button>
-        <div id="currentUser">当前用户: 未设置</div>
-        <div id="apiKeyStatus" style="margin-top: 10px; color: #666;">API密钥状态: 未设置</div>
-    </div>
-
-    <hr>
-
-    <!-- 2. 健康检查 -->
-    <div>
-        <h2>2. 健康检查</h2>
-        <button onclick="checkHealth()">检查系统健康状态</button>
-        <pre id="healthResult"></pre>
-    </div>
-
-    <hr>
-
-    <!-- 3. 系统状态 -->
-    <div>
-        <h2>3. 系统状态</h2>
-        <button onclick="getStatus()">获取系统状态</button>
-        <pre id="statusResult"></pre>
-    </div>
-
-    <hr>
-
-    <!-- 4. 对话管理功能测试 -->
-    <div>
-        <h2>4. 对话管理功能测试</h2>
-        <div style="display: flex; gap: 20px; margin-bottom: 15px;">
-            <div style="flex: 1;">
-                <h3>创建新对话</h3>
-                <label>对话描述: <input type="text" id="newConversationDesc" placeholder="可选：输入对话描述"></label><br><br>
-                <button onclick="createNewConversation()">创建新对话</button>
-                <p style="color: #666; font-size: 12px; margin-top: 5px;">💡 对话标题将在您发送第一条消息时由AI自动生成</p>
-            </div>
-            <div style="flex: 1;">
-                <h3>当前对话</h3>
-                <button onclick="getCurrentConversation()">获取当前对话</button>
-                <button onclick="getConversationsList()">获取对话列表</button>
-                <div id="currentConversationInfo" style="margin-top: 10px; padding: 10px; background: #f0f8ff; border: 1px solid #ccc; border-radius: 4px;">
-                    未获取当前对话信息
-                </div>
-            </div>
-        </div>
-        
-        <div style="margin-bottom: 15px;">
-            <h3>对话列表</h3>
-            <div id="conversationsList" style="max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; background: #f9f9f9;">
-                点击"获取对话列表"查看对话
-            </div>
-        </div>
-        
-        <div style="margin-bottom: 15px;">
-            <h3>切换对话</h3>
-            <label>对话ID: <input type="text" id="switchConversationId" placeholder="输入要切换的对话ID"></label>
-            <button onclick="switchConversation()">切换到该对话</button>
-        </div>
-        
-        <pre id="conversationResult" style="background:#f8f8f8; border:1px solid #ccc; padding:10px; min-height:120px;"></pre>
-    </div>
-
-    <hr>
-
-    <!-- 5. CSV文件上传 -->
-    <div>
-        <h2>5. CSV文件上传</h2>
-        <input type="file" id="csvFile" accept=".csv"><br><br>
-        <button onclick="uploadCSV()">上传CSV文件</button>
-        <pre id="uploadResult"></pre>
-        
-        <h3>当前会话中的数据表</h3>
-                    <button onclick="refreshTablesList()" id="refreshTablesBtn">🔄 刷新表列表</button>
-            <div id="tablesList" style="margin-top: 10px; padding: 10px; background: #f9f9f9; border: 1px solid #ddd; border-radius: 4px;">
-                点击"刷新表列表"查看当前会话中的数据表
-            </div>
-    </div>
-
-    <hr>
-
-    <!-- 6. 流式数据分析 (重点测试) -->
-    <div>
-        <h2>6. 流式数据分析 (重点测试)</h2>
-        <label>分析查询: 
-            <textarea id="analysisQuery" rows="3" cols="80" placeholder="输入你的数据分析需求，例如：分析数据的基本统计信息并生成详细的HTML报告">给我个报告</textarea>
-        </label><br><br>
-        
-        <label>System Prompt (可选): 
-            <textarea id="systemPrompt" rows="3" cols="80" placeholder="输入自定义System Prompt，例如：你是一个说话尖酸刻薄的财务审计..."></textarea>
-        </label><br><br>
-        
-        <button onclick="startMultiTurnChat()" id="analyzeBtn">开始多轮对话（包含富文本）</button>
-        <button onclick="stopAnalysis()" id="stopBtn" disabled>停止分析</button><br><br>
-        
-        <h3>流式响应日志:</h3>
-        <div style="display: flex; gap: 10px;">
-            <div style="flex:1; min-width: 0;">
-                <strong>状态(Status)</strong>
-                <div id="streamStatusLog" style="border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 5px; font-family: monospace; background: #f5f5f5; font-size: 13px;">等待分析开始...</div>
-            </div>
-            <div style="flex:1; min-width: 0;">
-                <strong>AI回复</strong>
-                <div id="streamAIResponseLog" style="border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 5px; font-family: monospace; background: #f5f5f5; font-size: 13px;">等待AI回复...</div>
-            </div>
-            <div style="flex:1; min-width: 0;">
-                <strong>工具结果</strong>
-                <div id="streamToolLog" style="border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 5px; font-family: monospace; background: #f5f5f5; font-size: 13px;">无</div>
-            </div>
-            <div style="flex:1; min-width: 0;">
-                <strong>错误/Error</strong>
-                <div id="streamErrorLog" style="border: 1px solid #ccc; height: 300px; overflow-y: auto; padding: 5px; font-family: monospace; background: #fff0f0; font-size: 13px; color: #b00;">无</div>
-            </div>
-        </div>
-        <div style="margin-top:10px;">
-            <strong>全部原始日志</strong>
-            <div id="streamLog" style="border: 1px solid #ccc; height: 200px; overflow-y: auto; padding: 5px; font-family: monospace; background: #f5f5f5; font-size: 12px;"></div>
-        </div>
-        
-        <h3>多轮对话窗口（打字机效果）:</h3>
-        <div id="aiResponse" style="border: 1px solid #ccc; height: 400px; overflow-y: auto; padding: 10px; background: #fff;">
-            <div style="text-align: center; color: #666; padding: 40px;">
-                <p>📱 多轮对话模式</p>
-                <p>请在上方输入框中输入您的问题，点击"开始多轮对话"按钮开始聊天</p>
-                <p>支持富文本消息和连续对话</p>
-            </div>
-        </div>
-
-
-    </div>
-
-    <hr>
-
-    <!-- 7. 历史记录接口测试 -->
-    <div>
-        <h2>7. 历史记录接口测试</h2>
-        <button onclick="getHistoryList()">获取历史列表</button>
-        <button onclick="getHistoryStats()">获取统计信息</button>
-        <button onclick="getRecentHistory()">获取最近5条</button>
-        <br><br>
-        <label>对话ID: <input type="text" id="historyDetailId" placeholder="输入对话ID"></label>
-        <button onclick="getHistoryDetail()">获取详情</button>
-        <button onclick="deleteHistoryDetail()">删除该记录</button>
-        <button onclick="loadConversationMessages()">📚 加载此对话到多轮窗口</button>
-        <br><br>
-        <pre id="historyResult" style="background:#f8f8f8; border:1px solid #ccc; padding:10px; min-height:120px;"></pre>
-    </div>
-
-    <!-- 添加必要的库 -->
+    <title>智能数据库分析系统 - 开发者控制台</title>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Marked & Highlight -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/lib/highlight.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css">
-
+    
     <style>
-        /* 打字机效果样式 */
-        .typing-text {
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f3f4f6; }
+        .markdown-content pre { background: #f6f8fa; padding: 1em; border-radius: 6px; overflow-x: auto; }
+        .markdown-content code { background: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
+        .markdown-content pre code { padding: 0; background: transparent; }
+        .dynamic-template-container { border: 2px dashed #3b82f6; padding: 20px; border-radius: 8px; background: white; margin-top: 20px; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
         
-        .typing-cursor {
-            display: inline-block;
-            width: 2px;
-            height: 1em;
-            background-color: #000;
-            margin-left: 2px;
-            animation: blink 1s infinite;
-        }
-        
-        @keyframes blink {
-            50% { opacity: 0; }
-        }
-        
-        /* Markdown 样式 */
-        .markdown-content {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            line-height: 1.6;
-        }
-        
-        .markdown-content pre {
-            background-color: #f6f8fa;
-            border-radius: 6px;
-            padding: 16px;
-            overflow: auto;
-        }
-        
-        .markdown-content code {
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-            font-size: 0.9em;
-            background-color: rgba(27, 31, 35, 0.05);
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
-        }
-        
-        .markdown-content p {
-            margin: 0 0 16px;
-        }
-        
-        .markdown-content ul, .markdown-content ol {
-            padding-left: 2em;
-            margin: 0 0 16px;
-        }
-        
-        /* 消息操作按钮样式 */
-        .message-actions button {
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .message-actions button:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-        .message-actions button:active {
-            transform: translateY(0);
-        }
-        
-        /* 消息容器悬停效果 */
-        .user-message > div:hover,
-        .ai-message > div:hover {
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            transition: box-shadow 0.2s ease;
-        }
+        /* 模拟报告卡片样式 */
+        .report-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .kpi { font-size: 24px; font-weight: bold; color: #1f2937; margin: 10px 0; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+        th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; }
+        th { background-color: #f9fafb; }
     </style>
+</head>
+<body>
+    <div id="app" class="container mx-auto p-4 max-w-7xl">
+        <!-- 顶部导航 -->
+        <header class="bg-white shadow rounded-lg p-4 mb-6 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">📊 智能数据库分析系统</h1>
+                <p class="text-sm text-gray-500">开发者调试控制台 v3.0</p>
+            </div>
+            <div class="flex gap-2">
+                <div class="text-right">
+                    <div class="text-sm font-semibold">{{ config.username }}</div>
+                    <div class="text-xs text-gray-500">{{ config.userId }}</div>
+                </div>
+                <button @click="showConfig = true" class="p-2 text-gray-600 hover:text-blue-600">
+                    ⚙️ 设置
+                </button>
+            </div>
+        </header>
 
-    <script>
-        // 全局变量
-        let currentReader = null;
-        let currentUserId = 'test_user_001';
-        let currentUsername = 'TestUser';
-        let currentApiKey = '';
-        // 注意：HTML报告功能已移除，后端不提供 /api/latest-report 接口
-        let currentConversationId = null;
-
-        // 设置用户信息
-        function setUserInfo() {
-            currentUserId = document.getElementById('userId').value || 'test_user_001';
-            currentUsername = document.getElementById('username').value || 'TestUser';
-            currentApiKey = document.getElementById('apiKey').value || '';
-            
-            document.getElementById('currentUser').textContent = `当前用户: ${currentUsername} (${currentUserId})`;
-            
-            // 更新API密钥状态显示
-            const apiKeyStatus = document.getElementById('apiKeyStatus');
-            if (currentApiKey) {
-                const maskedKey = currentApiKey.substring(0, 8) + '***' + currentApiKey.substring(currentApiKey.length - 4);
-                apiKeyStatus.textContent = `API密钥状态: 已设置 (${maskedKey})`;
-                apiKeyStatus.style.color = '#4CAF50';
-            } else {
-                apiKeyStatus.textContent = 'API密钥状态: 未设置';
-                apiKeyStatus.style.color = '#f44336';
-            }
-            
-            log('用户信息已设置: ' + currentUsername);
-        }
-
-        // 获取请求头
-        function getHeaders() {
-            // 强制要求用户ID、用户名和API Key
-            if (!currentUserId || !currentUsername || !currentApiKey) {
-                throw new Error('用户ID、用户名和API Key都是必需的');
-            }
-            
-            const headers = {
-                'Content-Type': 'application/json',
-                'X-User-ID': currentUserId,
-                'X-Username': encodeURIComponent(currentUsername),
-                'X-API-Key': currentApiKey
-            };
-            
-            return headers;
-        }
-
-        // 检查用户认证信息是否完整
-        function checkUserAuth() {
-            if (!currentUserId) {
-                alert('请先设置用户ID！');
-                return false;
-            }
-            if (!currentUsername) {
-                alert('请先设置用户名！');
-                return false;
-            }
-            if (!currentApiKey) {
-                alert('请先设置API密钥！访问系统需要有效的Anthropic API Key。');
-                return false;
-            }
-            return true;
-        }
-
-        // 向后兼容的API Key检查函数
-        function checkApiKey() {
-            return checkUserAuth();
-        }
-
-        // 日志记录函数
-        function log(message) {
-            console.log(message);
-            const logDiv = document.getElementById('streamLog');
-            const timestamp = new Date().toLocaleTimeString();
-            logDiv.innerHTML += `[${timestamp}] ${message}<br/>`;
-            logDiv.scrollTop = logDiv.scrollHeight;
-        }
-
-        // 分类日志记录函数
-        function logByType(type, message) {
-            const map = {
-                'status': 'streamStatusLog',
-                'ai_response': 'streamAIResponseLog',
-                'tool_result': 'streamToolLog',
-                'error': 'streamErrorLog',
-                'html_ready': 'streamStatusLog', // 也归为状态
-                'default': 'streamLog'
-            };
-            const divId = map[type] || map['default'];
-            const div = document.getElementById(divId);
-            const timestamp = new Date().toLocaleTimeString();
-            div.innerHTML += `[${timestamp}] ${message}<br/>`;
-            div.scrollTop = div.scrollHeight;
-        }
-
-        // 清空日志（不清空多轮对话窗口）
-        function clearLog() {
-            document.getElementById('streamLog').innerHTML = '';
-            document.getElementById('streamStatusLog').innerHTML = '';
-            document.getElementById('streamAIResponseLog').innerHTML = '';
-            document.getElementById('streamToolLog').innerHTML = '';
-            document.getElementById('streamErrorLog').innerHTML = '';
-        }
-
-        // 1. 健康检查
-        async function checkHealth() {
-            try {
-                log('正在检查系统健康状态...');
-                const response = await fetch('http://localhost:5000/api/health');
-                const data = await response.json();
-                document.getElementById('healthResult').textContent = JSON.stringify(data, null, 2);
-                log('健康检查完成');
-            } catch (error) {
-                log('健康检查失败: ' + error.message);
-                document.getElementById('healthResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        // 2. 获取系统状态
-        async function getStatus() {
-            if (!checkUserAuth()) return;
-            
-            try {
-                log('正在获取系统状态...');
-                const response = await fetch('http://localhost:5000/api/status', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                const data = await response.json();
-                document.getElementById('statusResult').textContent = JSON.stringify(data, null, 2);
-                log('系统状态获取完成');
-            } catch (error) {
-                log('获取系统状态失败: ' + error.message);
-                document.getElementById('statusResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        // 3. 上传CSV文件
-        async function uploadCSV() {
-            if (!checkUserAuth()) return;
-            
-            const fileInput = document.getElementById('csvFile');
-            
-            if (!fileInput.files.length) {
-                alert('请选择CSV文件');
-                return;
-            }
-
-            const file = fileInput.files[0];
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('userId', currentUserId);
-            formData.append('username', currentUsername);
-
-            try {
-                log('正在上传CSV文件: ' + file.name);
+        <!-- 主体内容 -->
+        <div class="flex gap-6">
+            <!-- 左侧侧边栏 -->
+            <aside class="w-64 flex-shrink-0">
+                <nav class="bg-white shadow rounded-lg overflow-hidden">
+                    <a v-for="tab in tabs" :key="tab.id" 
+                       @click="currentTab = tab.id"
+                       :class="['block px-4 py-3 cursor-pointer hover:bg-gray-50 border-l-4 transition-colors', 
+                                currentTab === tab.id ? 'border-blue-500 bg-blue-50 text-blue-700 font-medium' : 'border-transparent text-gray-600']">
+                        {{ tab.name }}
+                    </a>
+                </nav>
                 
-                const uploadHeaders = {
-                    'X-User-ID': currentUserId,
-                    'X-Username-B64': btoa(unescape(encodeURIComponent(currentUsername))),
-                    'X-API-Key': currentApiKey
-                };
-                
-                const response = await fetch('http://localhost:5000/api/upload', {
-                    method: 'POST',
-                    headers: uploadHeaders,
-                    body: formData
-                });
-
-                const data = await response.json();
-                document.getElementById('uploadResult').textContent = JSON.stringify(data, null, 2);
-                
-                if (data.success) {
-                    log(`CSV上传成功: ${data.data.rows_imported} 行数据已导入`);
-                                    // 上传成功后自动刷新表列表
-                refreshTablesList();
-                } else {
-                    log('CSV上传失败: ' + data.message);
-                }
-            } catch (error) {
-                log('CSV上传出错: ' + error.message);
-                document.getElementById('uploadResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        // 刷新表列表
-        async function refreshTablesList() {
-            if (!checkUserAuth()) return;
-            
-            try {
-                log('正在获取表列表...');
-                
-                const response = await fetch('http://localhost:5000/api/tables-info', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-
-                const data = await response.json();
-                
-                if (data.success) {
-                    displayTablesList(data.data);
-                    log(`✅ 获取表列表成功，共 ${data.data.total_tables} 个表`);
-                } else {
-                    log('❌ 获取表列表失败: ' + data.message);
-                    document.getElementById('tablesList').innerHTML = '<p style="color: red;">获取表列表失败: ' + data.message + '</p>';
-                }
-            } catch (error) {
-                log('❌ 获取表列表出错: ' + error.message);
-                document.getElementById('tablesList').innerHTML = '<p style="color: red;">获取表列表出错: ' + error.message + '</p>';
-            }
-        }
-
-        // 显示表列表（增强版 - 支持详细表结构信息）
-        function displayTablesList(data) {
-            const tablesDiv = document.getElementById('tablesList');
-            
-            // 添加调试信息
-            console.log('displayTablesList 接收到的数据:', data);
-            console.log('data.tables 类型:', typeof data.tables);
-            console.log('data.tables 是否为数组:', Array.isArray(data.tables));
-            
-            if (!data.tables || !Array.isArray(data.tables) || data.tables.length === 0) {
-                tablesDiv.innerHTML = '<p style="color: #666; text-align: center; padding: 20px;">当前会话中没有数据表<br>请先上传文件</p>';
-                return;
-            }
-            
-            let html = '<div>';
-            html += `<p><strong>当前会话中共有 ${data.tables.length} 个数据表:</strong></p>`;
-            html += `<p><small>数据库路径: ${data.database_path}</small></p>`;
-            
-            data.tables.forEach((table, index) => {
-                html += `
-                    <div style="margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                        <h4 style="margin: 0 0 10px 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; display: flex; justify-content: space-between; align-items: center;">
-                            <span>📊 表 ${index + 1}: ${table.table_name}</span>
-                            <button onclick="deleteTable('${table.table_name}', '${table.original_filename}')" 
-                                    style="padding: 4px 8px; font-size: 12px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;" 
-                                    title="删除此表">
-                                🗑️ 删除
-                            </button>
-                        </h4>
-                        <div style="margin-left: 10px; color: #666; font-size: 14px;">
-                            <p><strong>📁 原始文件:</strong> ${table.original_filename}</p>
-                            <p><strong>📏 数据规模:</strong> ${table.row_count} 行 × ${table.columns.length} 列</p>
-                            <p><strong>🕒 创建时间:</strong> ${table.created_at}</p>
-                            <p><strong>📝 描述:</strong> ${table.description}</p>
-                            
-                            <!-- 列结构信息 -->
-                            <div style="margin-top: 10px;">
-                                <strong>🏗️ 列结构:</strong>
-                                <div style="margin-left: 15px; max-height: 150px; overflow-y: auto; background: #f8f9fa; padding: 8px; border-radius: 4px; margin-top: 5px;">
-                `;
-                
-                table.columns.forEach((col, colIndex) => {
-                    html += `<span style="display: inline-block; margin: 2px 8px 2px 0; padding: 2px 6px; background: #e9ecef; border-radius: 3px; font-size: 12px;">${col.name} (${col.type})</span>`;
-                });
-                
-                html += `
-                                </div>
-                            </div>
-                            
-                            <!-- 样本数据 -->
-                            ${table.sample_data && table.sample_data.length > 0 ? `
-                            <div style="margin-top: 10px;">
-                                <strong>📋 样本数据 (前3行):</strong>
-                                <div style="margin-top: 5px; font-size: 12px; background: #f8f9fa; padding: 8px; border-radius: 4px; overflow-x: auto;">
-                                    <table style="width: 100%; border-collapse: collapse; min-width: 400px;">
-                                        <thead>
-                                            <tr style="background: #e9ecef;">
-                                                ${table.columns.map(col => `<th style="border: 1px solid #ddd; padding: 4px; text-align: left;">${col.name}</th>`).join('')}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${table.sample_data.map(row => `
-                                                <tr>
-                                                    ${table.columns.map(col => `<td style="border: 1px solid #ddd; padding: 4px; max-width: 100px; overflow: hidden; text-overflow: ellipsis;">${row[col.name] || ''}</td>`).join('')}
-                                                </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            ` : ''}
+                <!-- 状态面板 -->
+                <div class="mt-6 bg-white shadow rounded-lg p-4">
+                    <h3 class="font-bold text-gray-700 mb-2">系统状态</h3>
+                    <div v-if="systemStatus" class="text-sm space-y-2">
+                        <div class="flex justify-between">
+                            <span>API连接:</span>
+                            <span :class="systemStatus.api_status === 'connected' ? 'text-green-600' : 'text-red-600'">
+                                {{ systemStatus.api_status === 'connected' ? '正常' : '异常' }}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>数据库:</span>
+                            <span :class="systemStatus.database_connected ? 'text-green-600' : 'text-gray-500'">
+                                {{ systemStatus.database_connected ? '已连接' : '未连接' }}
+                            </span>
+                        </div>
+                        <div v-if="systemStatus.record_count" class="flex justify-between">
+                            <span>记录数:</span>
+                            <span>{{ systemStatus.record_count }}</span>
                         </div>
                     </div>
-                `;
-            });
-            
-            html += '</div>';
-            tablesDiv.innerHTML = html;
-        }
+                    <button @click="checkStatus" class="mt-3 w-full text-xs bg-gray-100 hover:bg-gray-200 py-1 rounded">刷新状态</button>
+                </div>
+            </aside>
 
-        // 配置 marked
-        marked.setOptions({
-            highlight: function(code, lang) {
-                if (lang && hljs.getLanguage(lang)) {
-                    return hljs.highlight(code, { language: lang }).value;
-                }
-                return hljs.highlightAuto(code).value;
-            },
-            breaks: true,
-            gfm: true
-        });
+            <!-- 右侧内容区 -->
+            <main class="flex-1 bg-white shadow rounded-lg p-6 min-h-[600px]">
+                
+                <!-- 1. 数据管理 -->
+                <div v-if="currentTab === 'data'">
+                    <h2 class="text-xl font-bold mb-4">数据上传与管理</h2>
+                    
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
+                        <input type="file" ref="fileInput" accept=".csv" class="hidden" @change="handleFileUpload">
+                        <button @click="$refs.fileInput.click()" class="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">
+                            选择 CSV 文件
+                        </button>
+                        <p class="mt-2 text-gray-500 text-sm">支持 .csv 格式，最大 100MB</p>
+                    </div>
 
-        // 打字机效果类
-        class TypingText {
-            constructor(element, options = {}) {
-                this.element = element;
-                this.options = {
-                    speed: options.speed || 30,
-                    cursor: options.cursor !== false,
-                    onComplete: options.onComplete || (() => {})
+                    <div v-if="tables.length > 0" class="mt-8">
+                        <h3 class="font-bold mb-2">当前会话数据表</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">表名</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">来源文件</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">行数</th>
+                                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-white divide-y divide-gray-200">
+                                    <tr v-for="table in tables" :key="table.table_name">
+                                        <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ table.table_name }}</td>
+                                        <td class="px-4 py-2 text-sm text-gray-500">{{ table.original_filename }}</td>
+                                        <td class="px-4 py-2 text-sm text-gray-500">{{ table.row_count }}</td>
+                                        <td class="px-4 py-2 text-sm">
+                                            <button @click="deleteTable(table.table_name)" class="text-red-600 hover:text-red-900">删除</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. 智能分析 -->
+                <div v-if="currentTab === 'analysis'" class="flex flex-col h-[700px]">
+                    <!-- 聊天记录区 -->
+                    <div class="flex-1 overflow-y-auto mb-4 border rounded p-4 space-y-4" ref="chatBox">
+                        <div v-for="(msg, index) in chatMessages" :key="index" :class="['flex', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+                            <div :class="['max-w-[80%] rounded-lg p-3 shadow-sm', 
+                                        msg.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-800']">
+                                <div v-if="msg.type === 'text'" class="markdown-content" v-html="renderMarkdown(msg.content)"></div>
+                                
+                                <!-- 动态模板渲染区域 -->
+                                <div v-if="msg.type === 'template_render'" class="mt-2 bg-white rounded p-2 border">
+                                    <div class="text-xs text-gray-500 mb-1">动态模板渲染: {{ msg.templateName }}</div>
+                                    <!-- 动态组件挂载点 -->
+                                    <component :is="msg.component" :report_data="msg.data"></component>
+                                </div>
+
+                                <!-- 生成模板按钮 (仅针对 AI 回复) -->
+                                <div v-if="msg.role === 'assistant' && msg.type === 'text'" class="mt-2 pt-2 border-t border-gray-200/20">
+                                    <button @click="openTemplateGenerator(msg.content)" class="text-xs flex items-center gap-1 opacity-70 hover:opacity-100 transition-opacity">
+                                        <span>📐</span> 保存为模板
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="isAnalyzing" class="flex justify-start">
+                            <div class="bg-gray-100 rounded-lg p-3 text-gray-500 text-sm">
+                                <span class="inline-block animate-bounce">●</span>
+                                <span class="inline-block animate-bounce delay-100">●</span>
+                                <span class="inline-block animate-bounce delay-200">●</span>
+                                {{ currentStatus }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 输入区 -->
+                    <div class="border-t pt-4">
+                        <div v-if="activeTemplate" class="mb-2 bg-blue-50 p-2 rounded flex justify-between items-center text-sm text-blue-700">
+                            <span>📦 正在使用模板: <strong>{{ activeTemplate.name }}</strong></span>
+                            <button @click="clearActiveTemplate" class="text-blue-500 hover:text-blue-700">取消</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <textarea v-model="userQuery" @keydown.enter.ctrl="startAnalysis"
+                                      class="flex-1 border rounded p-2 focus:ring-2 focus:ring-blue-500 outline-none resize-none" 
+                                      rows="3" 
+                                      :placeholder="activeTemplate ? '输入数据范围或特定要求（模板已包含分析逻辑）...' : '输入分析需求，例如：分析上季度的销售趋势...'"></textarea>
+                            <button @click="startAnalysis" :disabled="isAnalyzing"
+                                    class="bg-blue-600 text-white px-6 rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center">
+                                <span v-if="!isAnalyzing">发送</span>
+                                <span v-else>分析中...</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. 模板管理 -->
+                <div v-if="currentTab === 'templates'">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold">报告模板库</h2>
+                        <button @click="fetchTemplates" class="text-blue-600 hover:underline">刷新列表</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div v-for="tpl in templates" :key="tpl.id" class="border rounded-lg p-4 hover:shadow-md transition-shadow bg-white relative group">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h3 class="font-bold text-lg text-gray-800">{{ tpl.name }}</h3>
+                                    <p class="text-sm text-gray-500 mt-1 line-clamp-2">{{ tpl.description || '无描述' }}</p>
+                                </div>
+                                <div class="flex gap-1">
+                                    <button @click="viewTemplateDetail(tpl.id)" class="p-1 text-gray-400 hover:text-blue-600" title="查看代码">
+                                        📝
+                                    </button>
+                                    <button @click="deleteTemplate(tpl.id)" class="p-1 text-gray-400 hover:text-red-600" title="删除">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="mt-4 flex justify-between items-center border-t pt-3">
+                                <span class="text-xs text-gray-400">{{ formatDate(tpl.created_at) }}</span>
+                                <button @click="useTemplate(tpl)" 
+                                        class="bg-blue-50 text-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-100 font-medium">
+                                    使用此模板
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- 空状态 -->
+                        <div v-if="templates.length === 0" class="col-span-2 text-center py-10 text-gray-400 border-2 border-dashed rounded-lg">
+                            <p>暂无模板</p>
+                            <p class="text-sm mt-2">在智能分析的对话中点击“保存为模板”即可创建</p>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- 弹窗：配置 -->
+        <div v-if="showConfig" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-96 shadow-xl">
+                <h3 class="text-lg font-bold mb-4">系统配置</h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">API Key</label>
+                        <input v-model="config.apiKey" type="password" class="mt-1 block w-full border rounded px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">User ID</label>
+                        <input v-model="config.userId" type="text" class="mt-1 block w-full border rounded px-3 py-2">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Username</label>
+                        <input v-model="config.username" type="text" class="mt-1 block w-full border rounded px-3 py-2">
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end gap-3">
+                    <button @click="showConfig = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">取消</button>
+                    <button @click="saveConfig" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 弹窗：生成模板确认 -->
+        <div v-if="showTemplateGenerator" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-[600px] shadow-xl max-h-[80vh] overflow-y-auto">
+                <h3 class="text-lg font-bold mb-4">生成新模板</h3>
+                <div class="bg-gray-50 p-3 rounded mb-4 text-sm max-h-40 overflow-y-auto border">
+                    <div class="font-bold mb-1 text-gray-500">源 HTML 内容 preview:</div>
+                    <code>{{ templateSourceHtml.substring(0, 200) }}...</code>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">补充说明 (可选)</label>
+                    <textarea v-model="templateContext" placeholder="例如：这是一份包含季度收入和利润的报表..." 
+                              class="w-full border rounded p-2 text-sm" rows="3"></textarea>
+                </div>
+                <div class="flex justify-end gap-3">
+                    <button @click="showTemplateGenerator = false" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded">取消</button>
+                    <button @click="confirmGenerateTemplate" 
+                            :disabled="isGeneratingTemplate"
+                            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">
+                        <span v-if="isGeneratingTemplate" class="animate-spin">⌛</span>
+                        {{ isGeneratingTemplate ? 'AI生成中...' : '开始生成' }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 弹窗：模板代码预览 -->
+        <div v-if="viewingTemplate" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-[800px] max-h-[90vh] overflow-y-auto shadow-xl flex flex-col">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">{{ viewingTemplate.name }}</h3>
+                    <button @click="viewingTemplate = null" class="text-gray-500 hover:text-gray-700">✕</button>
+                </div>
+                
+                <div class="flex-1 overflow-y-auto space-y-4">
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-700 mb-1">Vue Template</h4>
+                        <pre class="bg-gray-800 text-white p-3 rounded text-sm overflow-x-auto"><code>{{ viewingTemplate.vue_template }}</code></pre>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-gray-700 mb-1">Data Schema (JSON)</h4>
+                        <pre class="bg-gray-800 text-white p-3 rounded text-sm overflow-x-auto"><code>{{ JSON.stringify(viewingTemplate.data_schema, null, 2) }}</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, reactive, onMounted, computed, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                // 配置
+                const config = reactive({
+                    apiKey: localStorage.getItem('apiKey') || '',
+                    userId: localStorage.getItem('userId') || 'dev_user',
+                    username: localStorage.getItem('username') || 'Developer'
+                });
+                const showConfig = ref(false);
+
+                // 状态
+                const currentTab = ref('analysis');
+                const systemStatus = ref(null);
+                const tables = ref([]);
+                const templates = ref([]);
+                
+                // 聊天相关
+                const chatMessages = ref([
+                    { role: 'assistant', type: 'text', content: '👋 你好！我是智能数据分析助手。请上传 CSV 数据，我可以帮你分析并生成可视化报告。' }
+                ]);
+                const userQuery = ref('');
+                const isAnalyzing = ref(false);
+                const currentStatus = ref('');
+                const chatBox = ref(null);
+
+                // 模板相关
+                const showTemplateGenerator = ref(false);
+                const templateSourceHtml = ref('');
+                const templateContext = ref('');
+                const isGeneratingTemplate = ref(false);
+                const viewingTemplate = ref(null);
+                const activeTemplate = ref(null); // 当前选中的待使用模板
+
+                const tabs = [
+                    { id: 'data', name: '📂 数据管理' },
+                    { id: 'analysis', name: '🤖 智能分析' },
+                    { id: 'templates', name: '📐 模板管理' },
+                ];
+
+                // -----------------------------------------------------------
+                // 基础功能
+                // -----------------------------------------------------------
+                const saveConfig = () => {
+                    localStorage.setItem('apiKey', config.apiKey);
+                    localStorage.setItem('userId', config.userId);
+                    localStorage.setItem('username', config.username);
+                    showConfig.value = false;
+                    checkStatus();
                 };
-                
-                this.queue = [];
-                this.isTyping = false;
-                this.currentText = '';
-                
-                if (this.options.cursor) {
-                    this.cursor = document.createElement('span');
-                    this.cursor.className = 'typing-cursor';
-                    this.element.appendChild(this.cursor);
-                }
-            }
-            
-            type(text) {
-                this.queue.push(text);
-                if (!this.isTyping) {
-                    this.startTyping();
-                }
-            }
-            
-            async startTyping() {
-                this.isTyping = true;
-                
-                while (this.queue.length > 0) {
-                    const text = this.queue.shift();
-                    await this.typeText(text);
-                }
-                
-                this.isTyping = false;
-                this.options.onComplete();
-            }
-            
-            async typeText(text) {
-                const words = text.split(/(\s+)/);
-                
-                for (const word of words) {
-                    this.currentText += word;
-                    this.element.innerHTML = marked.parse(this.currentText);
-                    if (this.options.cursor) {
-                        this.element.appendChild(this.cursor);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, this.options.speed));
-                }
-            }
-            
-            skip() {
-                this.queue = [];
-                if (this.isTyping) {
-                    this.isTyping = false;
-                    this.currentText += this.queue.join('');
-                    this.element.innerHTML = marked.parse(this.currentText);
-                    if (this.options.cursor) {
-                        this.element.appendChild(this.cursor);
-                    }
-                    this.options.onComplete();
-                }
-            }
-        }
 
-        // 4. 开始多轮对话（包含富文本）
-        async function startMultiTurnChat() {
-            if (!checkUserAuth()) return;
-            
-            const query = document.getElementById('analysisQuery').value.trim();
-            const systemPrompt = document.getElementById('systemPrompt').value.trim();
-            
-            if (!query) {
-                alert('请输入您的问题或需求');
-                return;
-            }
-            
-            // 如果没有当前对话，先创建一个
-            if (!currentConversationId) {
-                await createNewConversation();
-            }
-
-            // 不清空任何内容，保持日志和对话历史
-            
-            // 更新按钮状态
-            document.getElementById('analyzeBtn').disabled = true;
-            document.getElementById('stopBtn').disabled = false;
-
-            log('=== 开始多轮对话 ===');
-            log('用户消息: ' + query);
-            
-            // 在多轮对话窗口中显示用户消息
-            addUserMessageToChat(query);
-            
-            // 重置AI消息状态，准备接收新的AI回复
-            const aiDiv = document.getElementById('aiResponse');
-            aiDiv.currentAIMessage = null;
-            aiDiv.typingText = null;
-
-            try {
-                // 🔥 关键修复：使用正确的流式请求方式
-                const streamHeaders = {
+                const getHeaders = () => ({
                     'Content-Type': 'application/json',
-                    'Accept': 'text/event-stream',
-                    'Cache-Control': 'no-cache',
-                    'X-User-ID': currentUserId,
-                    'X-Username': encodeURIComponent(currentUsername),
-                    'X-API-Key': currentApiKey
-                };
-                
-                const response = await fetch('http://localhost:5000/api/analyze-stream', {
-                    method: 'POST',
-                    headers: streamHeaders,
-                    body: JSON.stringify({ 
-                        query: query,
-                        system_prompt: systemPrompt || undefined,
-                        userId: currentUserId,
-                        username: currentUsername,
-                        conversation_id: currentConversationId
-                    })
+                    'X-User-ID': config.userId,
+                    'X-Username': encodeURIComponent(config.username),
+                    'X-API-Key': config.apiKey
                 });
 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
+                const checkStatus = async () => {
+                    try {
+                        const res = await fetch('/api/status', { headers: getHeaders() });
+                        const data = await res.json();
+                        systemStatus.value = data;
+                        if (data.database_connected) fetchTables();
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
 
-                // 🔥 关键修复：使用ReadableStream正确处理流式数据
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder('utf-8');
-                currentReader = reader;
-                let buffer = '';
-
-                try {
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        
-                        if (done) {
-                            log('=== 多轮对话回复完成 ===');
-                            break;
+                const fetchTables = async () => {
+                    try {
+                        const res = await fetch('/api/tables-info', { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            tables.value = data.data.tables;
                         }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const handleFileUpload = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    // Headers for upload (no Content-Type, let browser set boundary)
+                    const headers = getHeaders();
+                    delete headers['Content-Type'];
+
+                    try {
+                        const res = await fetch('/api/upload', {
+                            method: 'POST',
+                            headers: headers,
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('✅ 上传成功');
+                            fetchTables();
+                        } else {
+                            alert('❌ 上传失败: ' + data.message);
+                        }
+                    } catch (e) {
+                        alert('❌ 上传异常: ' + e.message);
+                    }
+                };
+
+                const deleteTable = async (tableName) => {
+                    if (!confirm(`确定要删除表 ${tableName} 吗？`)) return;
+                    try {
+                        const res = await fetch('/api/tables/delete', {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ table_name: tableName })
+                        });
+                        const data = await res.json();
+                        if (data.success) fetchTables();
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                };
+
+                // -----------------------------------------------------------
+                // 分析功能 (核心)
+                // -----------------------------------------------------------
+                const startAnalysis = async () => {
+                    if (!userQuery.value.trim()) return;
+                    
+                    const query = userQuery.value;
+                    chatMessages.value.push({ role: 'user', type: 'text', content: query });
+                    userQuery.value = '';
+                    isAnalyzing.value = true;
+                    currentStatus.value = '准备中...';
+
+                    // 滚动到底部
+                    await nextTick();
+                    if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+
+                    try {
+                        // 构造请求体
+                        let payload = {
+                            query: query,
+                            conversation_id: 'dev_console_conv_' + config.userId
+                        };
+
+                        // 如果激活了模板，注入 System Prompt
+                        if (activeTemplate.value) {
+                            payload.system_prompt = `
+你是一个专业的数据计算引擎。请根据以下 Data Schema 定义，计算并返回严格的 JSON 数据。
+
+Data Schema:
+${JSON.stringify(activeTemplate.value.data_schema, null, 2)}
+
+要求：
+1. 仅返回合法的 JSON 字符串，不要包含 Markdown 标记。
+2. JSON 结构必须与 Schema 完全一致。
+3. 针对用户当前的具体查询范围：${query}
+`;
+                        }
+
+                        const response = await fetch('/api/analyze-stream', {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify(payload)
+                        });
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let aiResponseContent = '';
                         
-                        // 解码数据块
-                        buffer += decoder.decode(value, { stream: true });
-                        
-                        // 按行处理数据
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || ''; // 保留最后一个不完整的行
-                        
-                        for (const line of lines) {
-                            const trimmedLine = line.trim();
+                        // 如果是模板模式，我们需要捕获最终的 JSON
+                        let isTemplateMode = !!activeTemplate.value;
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
                             
-                            if (trimmedLine === '') {
-                                continue; // 跳过空行
-                            }
+                            const chunk = decoder.decode(value);
+                            const lines = chunk.split('\n');
                             
-                            // 🔥 处理Server-Sent Events格式
-                            if (trimmedLine.startsWith('data: ')) {
-                                try {
-                                    const jsonStr = trimmedLine.slice(6); // 移除 'data: '
-                                    
-                                    if (jsonStr === '[DONE]') {
-                                        log('收到完成信号');
-                                        break;
-                                    }
-                                    
-                                    const data = JSON.parse(jsonStr);
-                                    handleStreamMessage(data);
-                                    
-                                } catch (parseError) {
-                                    log('解析流数据失败: ' + trimmedLine);
-                                    console.error('Parse error:', parseError);
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    try {
+                                        const data = JSON.parse(line.slice(6));
+                                        
+                                        if (data.type === 'status') {
+                                            currentStatus.value = data.message;
+                                        } else if (data.type === 'ai_response') {
+                                            aiResponseContent += data.content;
+                                            // 更新最后一条消息（如果是流式显示文本）
+                                            // 暂不实时更新 UI，等完成后统一处理，或者你可以实现打字机效果
+                                        } else if (data.type === 'error') {
+                                            chatMessages.value.push({ role: 'assistant', type: 'text', content: `❌ 错误: ${data.message}` });
+                                        }
+                                    } catch (e) {}
                                 }
                             }
                         }
-                    }
-                } finally {
-                    if (currentReader) {
-                        currentReader.releaseLock();
-                        currentReader = null;
-                    }
-                }
 
-            } catch (error) {
-                log('多轮对话出错: ' + error.message);
-                console.error('Stream error:', error);
-            } finally {
-                // 恢复按钮状态
-                document.getElementById('analyzeBtn').disabled = false;
-                document.getElementById('stopBtn').disabled = true;
-                
-                // 清空输入框，准备下一轮对话
-                document.getElementById('analysisQuery').value = '';
-            }
-        }
+                        // 分析完成
+                        if (isTemplateMode) {
+                            // 尝试解析 JSON 并动态渲染
+                            try {
+                                let jsonStr = aiResponseContent.trim();
+                                // 清理可能的 markdown
+                                if (jsonStr.startsWith('```json')) jsonStr = jsonStr.substring(7);
+                                if (jsonStr.startsWith('```')) jsonStr = jsonStr.substring(3);
+                                if (jsonStr.endsWith('```')) jsonStr = jsonStr.substring(0, jsonStr.length - 3);
+                                
+                                const jsonData = JSON.parse(jsonStr);
+                                
+                                // 创建动态组件
+                                const DynamicReport = {
+                                    template: activeTemplate.value.vue_template,
+                                    props: ['report_data']
+                                };
 
-        // 修改处理流式消息的函数
-        function handleStreamMessage(data) {
-            const type = data.type;
-            
-            switch (type) {
-                case 'status':
-                    logByType('status', data.message);
-                    log(`[状态] ${data.message}`);
-                    break;
-                    
-                case 'ai_response':
-                    const aiDiv = document.getElementById('aiResponse');
-                    // 检查是否是新的AI回复（每次发送消息时都需要创建新的AI消息框）
-                    if (!aiDiv.currentAIMessage) {
-                        // 创建新的AI消息
-                        addAIMessageToChat('');
-                        aiDiv.currentAIMessage = aiDiv.querySelector('.ai-message:last-child .message-content');
-                        aiDiv.typingText = new TypingText(aiDiv.currentAIMessage, {
-                            speed: 20,
-                            cursor: true,
-                            onComplete: () => {
-                                aiDiv.scrollTop = aiDiv.scrollHeight;
-                                // 不要立即清空，等待下次新消息时再创建
+                                chatMessages.value.push({
+                                    role: 'assistant',
+                                    type: 'template_render',
+                                    templateName: activeTemplate.value.name,
+                                    component: DynamicReport,
+                                    data: jsonData
+                                });
+                                
+                                // 清除激活状态
+                                activeTemplate.value = null;
+
+                            } catch (e) {
+                                console.error('JSON解析失败', e);
+                                chatMessages.value.push({ role: 'assistant', type: 'text', content: '❌ 模板渲染失败，原始数据:\n' + aiResponseContent });
                             }
-                        });
-                    }
-                    aiDiv.typingText.type(data.content);
-                    logByType('ai_response', data.content);
-                    log(`[AI回复] 收到 ${data.content.length} 字符`);
-                    break;
-                    
-                case 'tool_result':
-                    logByType('tool_result', `${data.tool}: ${JSON.stringify(data.result).substring(0, 200)}...`);
-                    log(`[工具结果] ${data.tool}: ${JSON.stringify(data.result).substring(0, 200)}...`);
-                    break;
-                    
-                case 'html_ready':
-                    logByType('status', `[HTML就绪] 报告文件: ${data.file_path}`);
-                    log(`[HTML就绪] 报告文件: ${data.file_path}`);
-                    setTimeout(() => {
-                        getLatestReport();
-                    }, 1000);
-                    break;
-                    
-                case 'error':
-                    logByType('error', data.message);
-                    log(`[错误] ${data.message}`);
-                    break;
-                    
-                case 'user_message_id':
-                    // 更新最后一条用户消息的ID
-                    const tempUserMessage = document.querySelector('[data-message-id="temp"].user-message');
-                    if (tempUserMessage) {
-                        tempUserMessage.setAttribute('data-message-id', data.message_id);
-                        // 添加操作按钮
-                        const messageContainer = tempUserMessage.querySelector('div');
-                        const actionsHTML = `
-                            <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                                <button onclick="editMessage('${data.message_id}', 'user')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #007bff; border: 1px solid #007bff; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                                <button onclick="deleteMessage('${data.message_id}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                            </div>
-                        `;
-                        messageContainer.insertAdjacentHTML('beforeend', actionsHTML);
-                        
-                        // 添加鼠标悬停事件
-                        const actionsDiv = messageContainer.querySelector('.message-actions');
-                        messageContainer.addEventListener('mouseenter', () => {
-                            actionsDiv.style.display = 'flex';
-                        });
-                        messageContainer.addEventListener('mouseleave', () => {
-                            actionsDiv.style.display = 'none';
-                        });
-                    }
-                    log(`[消息ID] 用户消息ID: ${data.message_id}`);
-                    break;
-                    
-                case 'ai_message_id':
-                    // 更新最后一条AI消息的ID
-                    const tempAIMessage = document.querySelector('[data-message-id="temp"].ai-message');
-                    if (tempAIMessage) {
-                        tempAIMessage.setAttribute('data-message-id', data.message_id);
-                        // 添加操作按钮
-                        const messageContainer = tempAIMessage.querySelector('div');
-                        const actionsHTML = `
-                            <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                                <button onclick="editMessage('${data.message_id}', 'assistant')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #28a745; border: 1px solid #28a745; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                                <button onclick="deleteMessage('${data.message_id}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                            </div>
-                        `;
-                        messageContainer.insertAdjacentHTML('beforeend', actionsHTML);
-                        
-                        // 添加鼠标悬停事件
-                        const actionsDiv = messageContainer.querySelector('.message-actions');
-                        messageContainer.addEventListener('mouseenter', () => {
-                            actionsDiv.style.display = 'flex';
-                        });
-                        messageContainer.addEventListener('mouseleave', () => {
-                            actionsDiv.style.display = 'none';
-                        });
-                    }
-                    log(`[消息ID] AI消息ID: ${data.message_id}`);
-                    break;
-                    
-                default:
-                    logByType('default', JSON.stringify(data));
-                    log(`[未知消息] ${JSON.stringify(data)}`);
-            }
-        }
-
-        // 清空多轮对话窗口
-        function clearMultiTurnChatWindow() {
-            const chatDiv = document.getElementById('aiResponse');
-            chatDiv.innerHTML = `
-                <div style="text-align: center; color: #666; padding: 40px;">
-                    <p>📱 多轮对话模式</p>
-                    <p>请在上方输入框中输入您的问题，点击"开始多轮对话"按钮开始聊天</p>
-                    <p>支持富文本消息和连续对话</p>
-                </div>
-            `;
-            // 重置状态
-            chatDiv.currentAIMessage = null;
-            chatDiv.typingText = null;
-        }
-
-        // 添加用户消息到多轮对话窗口
-        function addUserMessageToChat(message, messageId = null) {
-            const chatDiv = document.getElementById('aiResponse');
-            
-            // 如果是第一条消息，清空欢迎信息
-            if (chatDiv.innerHTML.includes('多轮对话模式')) {
-                chatDiv.innerHTML = '';
-            }
-            
-            const userDiv = document.createElement('div');
-            userDiv.className = 'user-message';
-            userDiv.style.marginBottom = '16px';
-            userDiv.style.display = 'flex';
-            userDiv.style.justifyContent = 'flex-end';
-            userDiv.setAttribute('data-message-id', messageId || 'temp');
-            
-            userDiv.innerHTML = `
-                <div style="max-width: 70%; padding: 12px 16px; background: #007bff; color: white; border-radius: 18px 18px 4px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative; group;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">👤 我</div>
-                    <div class="message-text" style="white-space: pre-wrap;">${message}</div>
-                    ${messageId ? `
-                    <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                        <button onclick="editMessage('${messageId}', 'user')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #007bff; border: 1px solid #007bff; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                        <button onclick="deleteMessage('${messageId}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                    </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            // 添加鼠标悬停事件
-            if (messageId) {
-                const messageContainer = userDiv.querySelector('div');
-                const actionsDiv = userDiv.querySelector('.message-actions');
-                
-                messageContainer.addEventListener('mouseenter', () => {
-                    actionsDiv.style.display = 'flex';
-                });
-                messageContainer.addEventListener('mouseleave', () => {
-                    actionsDiv.style.display = 'none';
-                });
-            }
-            
-            chatDiv.appendChild(userDiv);
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
-        
-        // 添加AI消息到多轮对话窗口
-        function addAIMessageToChat(content, messageId = null) {
-            const chatDiv = document.getElementById('aiResponse');
-            
-            const aiDiv = document.createElement('div');
-            aiDiv.className = 'ai-message';
-            aiDiv.style.marginBottom = '16px';
-            aiDiv.style.display = 'flex';
-            aiDiv.style.justifyContent = 'flex-start';
-            aiDiv.setAttribute('data-message-id', messageId || 'temp');
-            
-            aiDiv.innerHTML = `
-                <div style="max-width: 70%; padding: 12px 16px; background: #f1f3f4; color: #333; border-radius: 18px 18px 18px 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: relative;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">🤖 AI助手</div>
-                    <div class="message-content" style="white-space: pre-wrap;">${content}</div>
-                    ${messageId ? `
-                    <div class="message-actions" style="position: absolute; top: -8px; right: -8px; display: none; flex-direction: row; gap: 4px;">
-                        <button onclick="editMessage('${messageId}', 'assistant')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #28a745; border: 1px solid #28a745; border-radius: 4px; cursor: pointer;" title="编辑消息">✏️</button>
-                        <button onclick="deleteMessage('${messageId}')" style="padding: 4px 6px; font-size: 10px; background: #fff; color: #dc3545; border: 1px solid #dc3545; border-radius: 4px; cursor: pointer;" title="撤销消息">🗑️</button>
-                    </div>
-                    ` : ''}
-                </div>
-            `;
-            
-            // 添加鼠标悬停事件
-            if (messageId) {
-                const messageContainer = aiDiv.querySelector('div');
-                const actionsDiv = aiDiv.querySelector('.message-actions');
-                
-                messageContainer.addEventListener('mouseenter', () => {
-                    actionsDiv.style.display = 'flex';
-                });
-                messageContainer.addEventListener('mouseleave', () => {
-                    actionsDiv.style.display = 'none';
-                });
-            }
-            
-            chatDiv.appendChild(aiDiv);
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-        }
-
-        // 从消息内容中提取文本
-        function extractTextContent(content) {
-            if (typeof content === 'string') {
-                return content;
-            }
-            if (Array.isArray(content)) {
-                let text = '';
-                content.forEach(block => {
-                    if (block.type === 'text') {
-                        text += block.text;
-                    } else if (block.type === 'tool_use') {
-                        text += `[使用工具: ${block.name}]`;
-                    } else if (block.type === 'tool_result') {
-                        text += `[工具结果]`;
-                    }
-                });
-                return text;
-            }
-            return String(content);
-        }
-
-        // 渲染历史消息到多轮对话窗口
-        function renderHistoryMessages(messages) {
-            if (!messages || messages.length === 0) {
-                log('📚 当前对话暂无历史消息');
-                return;
-            }
-            
-            log(`📚 正在加载 ${messages.length} 条历史消息...`);
-            
-            // 清空窗口
-            const chatDiv = document.getElementById('aiResponse');
-            chatDiv.innerHTML = '';
-            
-            // 渲染每条消息
-            messages.forEach((msg, index) => {
-                if (msg.role === 'user') {
-                    const textContent = extractTextContent(msg.content);
-                    if (textContent.trim()) {
-                        addUserMessageToChat(textContent, msg.id);
-                    }
-                } else if (msg.role === 'assistant') {
-                    const textContent = extractTextContent(msg.content);
-                    if (textContent.trim()) {
-                        addAIMessageToChat(textContent, msg.id);
-                    }
-                }
-                // 跳过tool_result消息，因为它们通常包含在assistant消息中
-            });
-            
-            // 滚动到底部
-            chatDiv.scrollTop = chatDiv.scrollHeight;
-            
-            log(`✅ 历史消息加载完成，共显示 ${messages.length} 条消息`);
-        }
-
-        // 停止分析
-        function stopAnalysis() {
-            if (currentReader) {
-                currentReader.cancel();
-                currentReader = null;
-            }
-            log('分析已停止');
-            document.getElementById('analyzeBtn').disabled = false;
-            document.getElementById('stopBtn').disabled = true;
-        }
-
-        // 注意：HTML报告功能已移除，后端不提供 /api/latest-report 接口
-        // 用户可以通过AI分析直接生成和查看报告
-
-        // 页面加载完成后设置默认用户信息
-        window.addEventListener('load', function() {
-            setUserInfo();
-            log('测试页面已加载完成');
-            
-            // 自动进行连接测试
-            setTimeout(() => {
-                checkHealth();
-            }, 500);
-        });
-
-        // 🔥 添加全局错误处理
-        window.addEventListener('unhandledrejection', event => {
-            console.error('未处理的Promise拒绝:', event.reason);
-            log('全局错误: ' + event.reason);
-        });
-
-        window.addEventListener('error', event => {
-            console.error('全局错误:', event.error);
-            log('JavaScript错误: ' + event.error);
-        });
-
-        // 历史记录相关API
-        async function getHistoryList() {
-            const limit = 10, offset = 0;
-            const response = await fetch(`http://localhost:5000/api/conversations?limit=${limit}&offset=${offset}`, {
-                method: 'GET',
-                headers: getHeaders()
-            });
-            const data = await response.json();
-            document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-        }
-        async function getHistoryStats() {
-            const response = await fetch('http://localhost:5000/api/conversations/stats', {
-                method: 'GET',
-                headers: getHeaders()
-            });
-            const data = await response.json();
-            document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-        }
-        async function getRecentHistory() {
-            const response = await fetch('http://localhost:5000/api/conversations/recent?limit=5', {
-                method: 'GET',
-                headers: getHeaders()
-            });
-            const data = await response.json();
-            document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-        }
-        async function getHistoryDetail() {
-            const id = document.getElementById('historyDetailId').value.trim();
-            if (!id) { alert('请输入对话ID'); return; }
-            const response = await fetch(`http://localhost:5000/api/conversations/${id}`, {
-                method: 'GET',
-                headers: getHeaders()
-            });
-            const data = await response.json();
-            document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-        }
-        async function deleteHistoryDetail() {
-            const id = document.getElementById('historyDetailId').value.trim();
-            if (!id) { alert('请输入对话ID'); return; }
-            if (!confirm('确定要删除该对话记录吗？')) return;
-            const response = await fetch(`http://localhost:5000/api/conversations/${id}`, {
-                method: 'DELETE',
-                headers: getHeaders()
-            });
-            const data = await response.json();
-            document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-        }
-
-        // 对话管理相关API
-        async function createNewConversation() {
-            try {
-                const description = document.getElementById('newConversationDesc').value.trim();
-                const response = await fetch('http://localhost:5000/api/conversations/create', {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({
-                        description: description || undefined
-                    })
-                });
-                const data = await response.json();
-                document.getElementById('conversationResult').textContent = JSON.stringify(data, null, 2);
-                if (data.success) {
-                    currentConversationId = data.conversation.conversation_id;
-                    log('新对话创建成功: ' + data.conversation.conversation_name);
-                    
-                    // 清空多轮对话窗口，显示新对话的欢迎信息
-                    clearMultiTurnChatWindow();
-                    
-                    getConversationsList();
-                    getCurrentConversation();
-                } else {
-                    log('创建对话失败: ' + data.message);
-                }
-            } catch (error) {
-                log('创建对话出错: ' + error.message);
-                document.getElementById('conversationResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        async function getConversationsList() {
-            try {
-                const response = await fetch('http://localhost:5000/api/conversations/list', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                document.getElementById('conversationResult').textContent = JSON.stringify(data, null, 2);
-                
-                if (data.success) {
-                    // 更新对话列表显示
-                    const listDiv = document.getElementById('conversationsList');
-                    if (data.conversations && data.conversations.length > 0) {
-                        let html = '<div style="font-weight: bold; margin-bottom: 10px;">对话列表:</div>';
-                        data.conversations.forEach(conv => {
-                            const isCurrent = conv.conversation_id === data.current_conversation_id;
-                            html += `
-                                <div style="margin-bottom: 8px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: ${isCurrent ? '#e6f3ff' : '#fff'};">
-                                    <div><strong>${conv.conversation_name}</strong> ${isCurrent ? '(当前)' : ''}</div>
-                                    <div style="font-size: 12px; color: #666;">ID: ${conv.conversation_id}</div>
-                                    <div style="font-size: 12px; color: #666;">描述: ${conv.description || '无'}</div>
-                                    <div style="font-size: 12px; color: #666;">创建时间: ${conv.created_time}</div>
-                                    <div style="font-size: 12px; color: #666;">消息数: ${conv.message_count}</div>
-                                    <button onclick="switchToConversation('${conv.conversation_id}')" style="margin-top: 5px; padding: 2px 8px; font-size: 11px;">切换到此对话</button>
-                                    <button onclick="loadConversationToChat('${conv.conversation_id}')" style="margin-top: 5px; margin-left: 5px; padding: 2px 8px; font-size: 11px; background-color: #4CAF50; color: white; border: none; border-radius: 3px;">📚 加载到聊天</button>
-                                    <button onclick="deleteConversation('${conv.conversation_id}', '${conv.conversation_name}')" style="margin-top: 5px; margin-left: 5px; padding: 2px 8px; font-size: 11px; background-color: #ff4444; color: white; border: none; border-radius: 3px;">删除</button>
-                                </div>
-                            `;
-                        });
-                        listDiv.innerHTML = html;
-                    } else {
-                        listDiv.innerHTML = '暂无对话';
-                    }
-                    
-                    log('对话列表获取成功，共 ' + (data.conversations ? data.conversations.length : 0) + ' 个对话');
-                } else {
-                    log('获取对话列表失败: ' + data.message);
-                }
-            } catch (error) {
-                log('获取对话列表出错: ' + error.message);
-                document.getElementById('conversationResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        async function getCurrentConversation() {
-            try {
-                const response = await fetch('http://localhost:5000/api/conversations/current', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                document.getElementById('conversationResult').textContent = JSON.stringify(data, null, 2);
-                
-                if (data.success && data.current_conversation) {
-                    const conv = data.current_conversation;
-                    currentConversationId = conv.conversation_id;
-                    const infoDiv = document.getElementById('currentConversationInfo');
-                    infoDiv.innerHTML = `
-                        <div><strong>当前对话:</strong> ${conv.conversation_name}</div>
-                        <div><strong>对话ID:</strong> ${conv.conversation_id}</div>
-                        <div><strong>描述:</strong> ${conv.description || '无'}</div>
-                        <div><strong>创建时间:</strong> ${conv.created_time}</div>
-                        <div><strong>最后活动:</strong> ${conv.last_activity}</div>
-                        <div><strong>消息数:</strong> ${conv.message_count}</div>
-                    `;
-                    
-                    // 加载历史消息到多轮对话窗口
-                    if (conv.messages) {
-                        renderHistoryMessages(conv.messages);
-                    } else {
-                        clearMultiTurnChatWindow();
-                    }
-                    
-                    log('当前对话信息获取成功: ' + conv.conversation_name);
-                } else {
-                    document.getElementById('currentConversationInfo').innerHTML = '未获取到当前对话信息';
-                    log('获取当前对话失败: ' + (data.message || '未知错误'));
-                }
-            } catch (error) {
-                log('获取当前对话出错: ' + error.message);
-                document.getElementById('conversationResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        async function switchConversation() {
-            try {
-                const conversationId = document.getElementById('switchConversationId').value.trim();
-                if (!conversationId) {
-                    alert('请输入对话ID');
-                    return;
-                }
-                const response = await fetch('http://localhost:5000/api/conversations/switch', {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({
-                        conversation_id: conversationId
-                    })
-                });
-                const data = await response.json();
-                document.getElementById('conversationResult').textContent = JSON.stringify(data, null, 2);
-                if (data.success) {
-                    currentConversationId = data.current_conversation.conversation_id;
-                    log('对话切换成功: ' + data.current_conversation.conversation_name);
-                    
-                    // 加载历史消息到多轮对话窗口
-                    if (data.current_conversation.messages) {
-                        renderHistoryMessages(data.current_conversation.messages);
-                    } else {
-                        clearMultiTurnChatWindow();
-                    }
-                    
-                    getCurrentConversation();
-                    getConversationsList();
-                } else {
-                    log('对话切换失败: ' + data.message);
-                }
-            } catch (error) {
-                log('切换对话出错: ' + error.message);
-                document.getElementById('conversationResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        // 便捷切换对话函数
-        function switchToConversation(conversationId) {
-            document.getElementById('switchConversationId').value = conversationId;
-            switchConversation();
-        }
-
-        // 加载对话消息到多轮对话窗口
-        async function loadConversationToChat(conversationId) {
-            try {
-                log(`📚 正在加载对话 ${conversationId} 的历史消息...`);
-                
-                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                
-                if (data.success && data.conversation && data.conversation.messages) {
-                    renderHistoryMessages(data.conversation.messages);
-                    log(`✅ 对话历史加载成功，共 ${data.conversation.messages.length} 条消息`);
-                    
-                    // 更新当前对话ID
-                    currentConversationId = conversationId;
-                    
-                    // 滚动到多轮对话窗口
-                    document.getElementById('aiResponse').scrollIntoView({ behavior: 'smooth' });
-                } else {
-                    log('❌ 加载对话历史失败: ' + (data.message || '对话数据为空'));
-                    alert('加载对话历史失败: ' + (data.message || '对话数据为空'));
-                }
-            } catch (error) {
-                log('❌ 加载对话历史出错: ' + error.message);
-                alert('加载对话历史出错: ' + error.message);
-            }
-        }
-
-        // 删除对话函数
-        async function deleteConversation(conversationId, conversationName) {
-            try {
-                if (!confirm(`确定要删除对话"${conversationName}"吗？此操作无法撤销！`)) {
-                    return;
-                }
-                
-                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
-                    method: 'DELETE',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`对话"${conversationName}"删除成功`);
-                    // 刷新对话列表
-                    getConversationsList();
-                    // 刷新当前对话信息
-                    getCurrentConversation();
-                } else {
-                    alert('删除失败: ' + data.message);
-                    log('删除对话失败: ' + data.message);
-                }
-            } catch (error) {
-                alert('删除对话出错: ' + error.message);
-                log('删除对话出错: ' + error.message);
-            }
-        }
-
-        // 删除数据表函数
-        async function deleteTable(tableName, originalFilename) {
-            if (!checkUserAuth()) return;
-            
-            try {
-                // 确认删除操作
-                if (!confirm(`确定要删除数据表"${tableName}"吗？\n\n原始文件: ${originalFilename}\n\n⚠️ 此操作将永久删除表中的所有数据，无法撤销！`)) {
-                    return;
-                }
-                
-                log(`🗑️ 正在删除数据表 ${tableName}...`);
-                
-                const response = await fetch('http://localhost:5000/api/tables/delete', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...getHeaders()
-                    },
-                    body: JSON.stringify({
-                        table_name: tableName
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`✅ 数据表"${tableName}"删除成功！删除了 ${data.data.deleted_rows} 行数据`);
-                    log(`📊 当前会话中还剩余 ${data.data.remaining_tables} 个数据表`);
-                    
-                    // 自动刷新表列表
-                    refreshTablesList();
-                    
-                    // 显示成功消息
-                    alert(`数据表删除成功！\n\n表名: ${data.data.deleted_table}\n删除数据: ${data.data.deleted_rows} 行\n剩余表数: ${data.data.remaining_tables} 个`);
-                } else {
-                    log('❌ 删除数据表失败: ' + data.message);
-                    alert('删除数据表失败: ' + data.message);
-                }
-            } catch (error) {
-                log('❌ 删除数据表出错: ' + error.message);
-                alert('删除数据表出错: ' + error.message);
-            }
-        }
-
-        // 编辑消息函数
-        async function editMessage(messageId, role) {
-            try {
-                if (!currentConversationId) {
-                    alert('请先选择一个对话');
-                    return;
-                }
-                
-                // 获取当前消息内容
-                const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-                if (!messageElement) {
-                    alert('找不到要编辑的消息');
-                    return;
-                }
-                
-                const currentText = messageElement.querySelector('.message-text, .message-content').textContent;
-                
-                // 弹出编辑对话框
-                const newContent = prompt('编辑消息内容:', currentText);
-                if (newContent === null || newContent.trim() === '') {
-                    return; // 用户取消或输入为空
-                }
-                
-                if (newContent === currentText) {
-                    return; // 内容未变化
-                }
-                
-                log(`📝 正在编辑消息 ${messageId}...`);
-                
-                // 发送编辑请求
-                const response = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}/messages/${messageId}/edit`, {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({
-                        new_content: newContent
-                    })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`✅ 消息编辑成功`);
-                    
-                    // 更新前端显示
-                    const textElement = messageElement.querySelector('.message-text, .message-content');
-                    textElement.textContent = newContent;
-                    
-                    // 刷新当前对话信息
-                    getCurrentConversation();
-                } else {
-                    alert('编辑消息失败: ' + data.message);
-                    log('编辑消息失败: ' + data.message);
-                }
-            } catch (error) {
-                alert('编辑消息出错: ' + error.message);
-                log('编辑消息出错: ' + error.message);
-            }
-        }
-
-        // 删除消息函数
-        async function deleteMessage(messageId) {
-            try {
-                if (!currentConversationId) {
-                    alert('请先选择一个对话');
-                    return;
-                }
-                
-                if (!confirm('确定要撤销这条消息吗？此操作无法撤销！')) {
-                    return;
-                }
-                
-                log(`🗑️ 正在删除消息 ${messageId}...`);
-                
-                // 发送删除请求
-                const response = await fetch(`http://localhost:5000/api/conversations/${currentConversationId}/messages/${messageId}/delete`, {
-                    method: 'POST',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    log(`✅ 消息删除成功`);
-                    
-                    // 从前端移除消息
-                    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
-                    if (messageElement) {
-                        messageElement.remove();
-                    }
-                    
-                    // 刷新当前对话信息
-                    getCurrentConversation();
-                } else {
-                    alert('删除消息失败: ' + data.message);
-                    log('删除消息失败: ' + data.message);
-                }
-            } catch (error) {
-                alert('删除消息出错: ' + error.message);
-                log('删除消息出错: ' + error.message);
-            }
-        }
-
-        // 历史记录测试区域的加载对话消息功能
-        async function loadConversationMessages() {
-            const conversationId = document.getElementById('historyDetailId').value.trim();
-            if (!conversationId) {
-                alert('请先输入对话ID');
-                return;
-            }
-            
-            try {
-                log(`📚 正在从历史记录加载对话 ${conversationId}...`);
-                
-                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                
-                const data = await response.json();
-                
-                if (data.success && data.conversation) {
-                    // 显示对话详情到历史记录结果区域
-                    document.getElementById('historyResult').textContent = JSON.stringify(data.conversation, null, 2);
-                    
-                    // 如果有消息，加载到多轮对话窗口
-                    if (data.conversation.messages && data.conversation.messages.length > 0) {
-                        renderHistoryMessages(data.conversation.messages);
-                        log(`✅ 对话历史加载成功，共 ${data.conversation.messages.length} 条消息`);
-                        
-                        // 更新当前对话ID
-                        currentConversationId = conversationId;
-                        
-                        // 滚动到多轮对话窗口
-                        document.getElementById('aiResponse').scrollIntoView({ behavior: 'smooth' });
-                        
-                        alert(`对话历史加载成功！\n对话名称: ${data.conversation.conversation_name}\n消息数量: ${data.conversation.messages.length} 条\n\n已加载到多轮对话窗口，请向下滚动查看。`);
-                    } else {
-                        log('⚠️ 该对话没有消息记录');
-                        alert('该对话没有消息记录');
-                    }
-                } else {
-                    log('❌ 加载对话失败: ' + (data.message || '对话不存在'));
-                    alert('加载对话失败: ' + (data.message || '对话不存在'));
-                }
-            } catch (error) {
-                log('❌ 加载对话出错: ' + error.message);
-                alert('加载对话出错: ' + error.message);
-            }
-        }
-
-        // 渲染历史消息到多轮对话窗口
-        function renderHistoryMessages(messages) {
-            const aiDiv = document.getElementById('aiResponse');
-            
-            // 清空现有内容
-            aiDiv.innerHTML = '';
-            
-            if (!messages || messages.length === 0) {
-                aiDiv.innerHTML = '<div style="text-align: center; color: #666; padding: 20px;">该对话没有消息记录</div>';
-                return;
-            }
-            
-            // 添加历史记录标识
-            const historyHeader = document.createElement('div');
-            historyHeader.style.cssText = 'text-align: center; padding: 10px; background: #f0f8ff; border: 1px solid #ccc; margin-bottom: 10px; border-radius: 4px; color: #666;';
-            historyHeader.innerHTML = `📚 历史对话记录 (共 ${messages.length} 条消息)`;
-            aiDiv.appendChild(historyHeader);
-            
-            // 渲染每条消息
-            messages.forEach((message, index) => {
-                const messageDiv = renderSingleMessage(message, index);
-                aiDiv.appendChild(messageDiv);
-            });
-            
-            // 滚动到底部
-            aiDiv.scrollTop = aiDiv.scrollHeight;
-        }
-
-        // 渲染单条消息
-        function renderSingleMessage(message, index) {
-            const messageDiv = document.createElement('div');
-            messageDiv.setAttribute('data-message-id', message.id);
-            messageDiv.style.cssText = 'margin-bottom: 15px; padding: 12px; border-radius: 8px; border: 1px solid #ddd;';
-            
-            // 判断消息类型
-            const messageType = getMessageDisplayType(message);
-            
-            // 根据消息类型设置样式和内容
-            switch(messageType) {
-                case 'user-input':
-                    messageDiv.className = 'user-message';
-                    messageDiv.style.backgroundColor = '#e3f2fd';
-                    messageDiv.style.marginLeft = '20%';
-                    messageDiv.innerHTML = `
-                        <div style="font-weight: bold; color: #1976d2; margin-bottom: 5px;">👤 用户</div>
-                        <div class="message-content">${renderMessageContent(message.content)}</div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${formatTimestamp(message.timestamp)}</div>
-                    `;
-                    break;
-                    
-                case 'ai-response':
-                case 'ai-with-tools':
-                case 'ai-tool-only':
-                    messageDiv.className = 'ai-message';
-                    messageDiv.style.backgroundColor = '#f5f5f5';
-                    messageDiv.style.marginRight = '20%';
-                    messageDiv.innerHTML = `
-                        <div style="font-weight: bold; color: #4caf50; margin-bottom: 5px;">🤖 AI助手</div>
-                        <div class="message-content">${renderMessageContent(message.content)}</div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${formatTimestamp(message.timestamp)}</div>
-                    `;
-                    break;
-                    
-                case 'tool-result':
-                    messageDiv.className = 'tool-result-message';
-                    messageDiv.style.backgroundColor = '#e8f5e8';
-                    messageDiv.style.margin = '0 10%';
-                    messageDiv.style.border = '1px dashed #4caf50';
-                    messageDiv.innerHTML = `
-                        <div style="font-weight: bold; color: #2e7d32; margin-bottom: 5px;">⚙️ 工具执行结果</div>
-                        <div class="message-content" style="font-family: monospace; font-size: 13px;">${renderMessageContent(message.content)}</div>
-                        <div style="font-size: 12px; color: #666; margin-top: 5px;">${formatTimestamp(message.timestamp)}</div>
-                    `;
-                    break;
-            }
-            
-            return messageDiv;
-        }
-
-        // 判断消息显示类型
-        function getMessageDisplayType(message) {
-            if (message.role === 'user') {
-                const hasToolResult = message.content.some(c => c.type === 'tool_result');
-                return hasToolResult ? 'tool-result' : 'user-input';
-            } else if (message.role === 'assistant') {
-                const hasToolUse = message.content.some(c => c.type === 'tool_use');
-                const hasText = message.content.some(c => c.type === 'text');
-                
-                if (hasToolUse && hasText) {
-                    return 'ai-with-tools';
-                } else if (hasToolUse) {
-                    return 'ai-tool-only';
-                } else {
-                    return 'ai-response';
-                }
-            }
-            return 'unknown';
-        }
-
-        // 渲染消息内容
-        function renderMessageContent(contentArray) {
-            if (!Array.isArray(contentArray)) {
-                return '<div>消息格式错误</div>';
-            }
-            
-            return contentArray.map(item => {
-                switch(item.type) {
-                    case 'text':
-                        return `<div class="text-content">${marked.parse(item.text)}</div>`;
-                        
-                    case 'tool_use':
-                        return `
-                            <div class="tool-call" style="background: #fff3cd; padding: 8px; border-radius: 4px; margin: 5px 0;">
-                                <div style="font-weight: bold; color: #856404;">🔧 调用工具: ${item.name}</div>
-                                <pre style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 5px;">${JSON.stringify(item.input, null, 2)}</pre>
-                            </div>
-                        `;
-                        
-                    case 'tool_result':
-                        let resultContent = item.content;
-                        if (typeof resultContent === 'object') {
-                            resultContent = JSON.stringify(resultContent, null, 2);
+                        } else {
+                            // 普通文本模式
+                            chatMessages.value.push({ role: 'assistant', type: 'text', content: aiResponseContent });
                         }
-                        return `
-                            <div class="tool-result" style="background: #d1ecf1; padding: 8px; border-radius: 4px; margin: 5px 0;">
-                                <div style="font-weight: bold; color: #0c5460;">📊 执行结果:</div>
-                                <pre style="background: #f8f9fa; padding: 8px; border-radius: 4px; font-size: 12px; margin-top: 5px; white-space: pre-wrap;">${resultContent}</pre>
-                            </div>
-                        `;
-                        
-                    default:
-                        return `<div>未知内容类型: ${item.type}</div>`;
-                }
-            }).join('');
-        }
 
-        // 格式化时间戳
-        function formatTimestamp(timestamp) {
-            try {
-                const date = new Date(timestamp);
-                return date.toLocaleString('zh-CN');
-            } catch (error) {
-                return timestamp;
-            }
-        }
+                    } catch (e) {
+                        chatMessages.value.push({ role: 'assistant', type: 'text', content: `❌ 请求异常: ${e.message}` });
+                    } finally {
+                        isAnalyzing.value = false;
+                        currentStatus.value = '';
+                        await nextTick();
+                        if (chatBox.value) chatBox.value.scrollTop = chatBox.value.scrollHeight;
+                    }
+                };
 
-        // 清空多轮对话窗口
-        function clearMultiTurnChatWindow() {
-            const aiDiv = document.getElementById('aiResponse');
-            aiDiv.innerHTML = `
-                <div style="text-align: center; color: #666; padding: 40px;">
-                    <p>📱 多轮对话模式</p>
-                    <p>请在上方输入框中输入您的问题，点击"开始多轮对话"按钮开始聊天</p>
-                    <p>支持富文本消息和连续对话</p>
-                </div>
-            `;
-        }
+                // -----------------------------------------------------------
+                // 模板管理功能
+                // -----------------------------------------------------------
+                const openTemplateGenerator = (htmlContent) => {
+                    templateSourceHtml.value = htmlContent;
+                    showTemplateGenerator.value = true;
+                };
 
-        // 7. 历史记录接口测试函数
-        async function getHistoryList() {
-            try {
-                log('正在获取历史记录列表...');
-                const response = await fetch('http://localhost:5000/api/conversations', {
-                    method: 'GET',
-                    headers: getHeaders()
+                const confirmGenerateTemplate = async () => {
+                    isGeneratingTemplate.value = true;
+                    try {
+                        const res = await fetch('/api/templates/generate', {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({
+                                html_content: templateSourceHtml.value,
+                                conversation_context: templateContext.value
+                            })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            alert('✅ 模板生成成功！');
+                            showTemplateGenerator.value = false;
+                            fetchTemplates(); // 刷新列表
+                        } else {
+                            alert('❌ 生成失败: ' + data.message);
+                        }
+                    } catch (e) {
+                        alert('❌ 异常: ' + e.message);
+                    } finally {
+                        isGeneratingTemplate.value = false;
+                    }
+                };
+
+                const fetchTemplates = async () => {
+                    try {
+                        const res = await fetch('/api/templates', { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            templates.value = data.data;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const viewTemplateDetail = async (id) => {
+                    try {
+                        const res = await fetch(`/api/templates/${id}`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            viewingTemplate.value = data.data;
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                const deleteTemplate = async (id) => {
+                    if (!confirm('确定删除此模板吗？')) return;
+                    try {
+                        const res = await fetch(`/api/templates/${id}`, { 
+                            method: 'DELETE',
+                            headers: getHeaders() 
+                        });
+                        const data = await res.json();
+                        if (data.success) fetchTemplates();
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                };
+
+                const useTemplate = async (tpl) => {
+                    // 获取完整详情以拿到 schema
+                    try {
+                        const res = await fetch(`/api/templates/${tpl.id}`, { headers: getHeaders() });
+                        const data = await res.json();
+                        if (data.success) {
+                            activeTemplate.value = data.data;
+                            currentTab.value = 'analysis'; // 切换到分析页
+                            // 自动聚焦输入框
+                            // alert(`已选择模板：${tpl.name}\n请在输入框中输入具体的数据范围（如：2024年Q1）`);
+                        }
+                    } catch (e) {
+                        alert('无法加载模板详情');
+                    }
+                };
+
+                const clearActiveTemplate = () => {
+                    activeTemplate.value = null;
+                };
+
+                // 工具函数
+                const formatDate = (str) => {
+                    return new Date(str).toLocaleString();
+                };
+
+                const renderMarkdown = (text) => {
+                    return marked.parse(text);
+                };
+
+                // 初始化
+                onMounted(() => {
+                    checkStatus();
+                    fetchTemplates();
                 });
-                const data = await response.json();
-                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-                log('历史记录列表获取完成');
-            } catch (error) {
-                log('获取历史记录列表失败: ' + error.message);
-                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
-            }
-        }
 
-        async function getHistoryStats() {
-            try {
-                log('正在获取历史记录统计信息...');
-                const response = await fetch('http://localhost:5000/api/conversations/stats', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                const data = await response.json();
-                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-                log('历史记录统计信息获取完成');
-            } catch (error) {
-                log('获取历史记录统计信息失败: ' + error.message);
-                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
+                return {
+                    config, showConfig, saveConfig,
+                    currentTab, tabs, systemStatus, checkStatus,
+                    tables, handleFileUpload, deleteTable,
+                    chatMessages, userQuery, startAnalysis, isAnalyzing, currentStatus, chatBox,
+                    renderMarkdown,
+                    // 模板相关
+                    templates, fetchTemplates, deleteTemplate,
+                    showTemplateGenerator, templateSourceHtml, templateContext, isGeneratingTemplate, openTemplateGenerator, confirmGenerateTemplate,
+                    viewingTemplate, viewTemplateDetail,
+                    useTemplate, activeTemplate, clearActiveTemplate
+                };
             }
-        }
-
-        async function getRecentHistory() {
-            try {
-                log('正在获取最近5条历史记录...');
-                const response = await fetch('http://localhost:5000/api/conversations/recent?limit=5', {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                const data = await response.json();
-                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-                log('最近历史记录获取完成');
-            } catch (error) {
-                log('获取最近历史记录失败: ' + error.message);
-                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        async function getHistoryDetail() {
-            const conversationId = document.getElementById('historyDetailId').value.trim();
-            if (!conversationId) {
-                alert('请输入对话ID');
-                return;
-            }
-            
-            try {
-                log(`正在获取对话 ${conversationId} 的详情...`);
-                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
-                    method: 'GET',
-                    headers: getHeaders()
-                });
-                const data = await response.json();
-                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-                log('对话详情获取完成');
-            } catch (error) {
-                log('获取对话详情失败: ' + error.message);
-                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-        async function deleteHistoryDetail() {
-            const conversationId = document.getElementById('historyDetailId').value.trim();
-            if (!conversationId) {
-                alert('请输入对话ID');
-                return;
-            }
-            
-            if (!confirm(`确定要删除对话 ${conversationId} 吗？此操作无法撤销！`)) {
-                return;
-            }
-            
-            try {
-                log(`正在删除对话 ${conversationId}...`);
-                const response = await fetch(`http://localhost:5000/api/conversations/${conversationId}`, {
-                    method: 'DELETE',
-                    headers: getHeaders()
-                });
-                const data = await response.json();
-                document.getElementById('historyResult').textContent = JSON.stringify(data, null, 2);
-                
-                if (data.success) {
-                    log('对话删除成功');
-                    // 清空输入框
-                    document.getElementById('historyDetailId').value = '';
-                } else {
-                    log('对话删除失败: ' + data.message);
-                }
-            } catch (error) {
-                log('删除对话失败: ' + error.message);
-                document.getElementById('historyResult').textContent = 'Error: ' + error.message;
-            }
-        }
-
-
-    </script>
-</body>
-</html>
-    </script>
-</body>
-</html>
+        }).mount('#app');
     </script>
 </body>
 </html>
